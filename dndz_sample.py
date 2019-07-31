@@ -31,9 +31,17 @@ dndz, z_edges, ngal = get_nz_from_photoz_bins(zp_code='pz_best_eab',      # Phot
                                               zp_ini=z_ini, zp_end=z_end, # Bin edges
                                               zt_edges=(0., 2.),          # Sampling range
                                               zt_nbins=10)                # Number of samples
+
+dndz_sm, z_edges_sm, _ = get_nz_from_photoz_bins(zp_code='pz_best_eab',   # Photo-z code
+                                              zp_ini=z_ini, zp_end=z_end, # Bin edges
+                                              zt_edges=(0., 2.),          # Sampling range
+                                              zt_nbins=100)               # Number of samples
+
 plt.figure()
 plt.title(" %.1lf < z_ph < %.1lf, %.1lf sources N(z)" % (z_ini, z_end, ngal))
-plt.plot(0.5*(z_edges[:-1]+z_edges[1:]), dndz)
+plt.plot(0.5*(z_edges[:-1]+z_edges[1:]), dndz, 'o-', label='10 bins')
+plt.plot(0.5*(z_edges_sm[:-1]+z_edges_sm[1:]), dndz_sm, label='100 bins')
+plt.legend()
 plt.xlabel("z", fontsize=14)
 plt.ylabel("p(z)", fontsize=14)
 plt.show()
