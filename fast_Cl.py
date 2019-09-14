@@ -11,9 +11,9 @@ import copy
 import pyccl as ccl
 import sys
 import hod 
-reload(hod)
+#%reload(hod)
 import hod_funcs_evol_fit
-reload(hod_funcs_evol_fit)
+#%reload(hod_funcs_evol_fit)
 import matplotlib.pyplot as plt
 from itertools import combinations
 import scipy.linalg as la
@@ -108,7 +108,7 @@ hod_params = {
 # ___________________________________
 
 # Read catalog
-cat=fits.open("/users/boryanah/repos/NzGCWL/data/cosmos_weights.fits")[1].data
+cat=fits.open("data/cosmos_weights.fits")[1].data
 
 def check_symmetric(a, rtol=1e-05, atol=1e-08):
     return np.allclose(a, a.T, rtol=rtol, atol=atol)
@@ -154,6 +154,14 @@ for i in range(N_tomo):
                                             zp_ini=z_bin_ini, zp_end=z_bin_end, # Bin edges
                                             zt_edges=(z_ini_sample, z_end_sample),          # Sampling range
                                             zt_nbins=N_zsamples_theo)         # Number of samples
+
+    #dndz_this[0]=0
+    #dndz_this[-1]=0
+
+    ## a single triangle
+    dndz_this*=0
+    dndz_this[i]=1.0
+
     # area under the curve (must be 1)
     sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0])) # equals 1
         
@@ -239,13 +247,14 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
 
     # load the bias parameters
     # k # indicates which of N_tomo sampling bins
-    b_z = np.array([par['b_%02d'%k]['val'] for k in range(N_zsamples)])
+    #b_z = np.array([par['b_%02d'%k]['val'] for k in range(N_zsamples)])
 
     '''
     # I am currently commenting this out so that b_z = ones
     a_cent = 1./(1.+z_cent)
     b_z = 0.95/ccl.growth_factor(cosmo_fid,a_cent)
     '''
+    b_z=np.ones(N_zsamples)
     
     # load the dndz parameters
     dndz_z = np.zeros((N_tomo,N_zsamples))
@@ -264,6 +273,11 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
     all_combos = np.vstack((temp,combs))
 
     
+    #print (all_combos)
+    #print (all_combos.shape)
+    #print (tot_corr/N_ell)
+    #stop()
+    
     for c, comb in enumerate(all_combos):
         i = comb[0]%N_tomo # first redshift bin
         j = comb[1]%N_tomo # second redshift bin
@@ -271,7 +285,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
         t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
         
         # NOISE
-        if (i == j):
+        if (i == j) and False:
             # number density of galaxies
             N_gal = N_gal_sample[i]            
             n_gal = N_gal/area_COSMOS # in rad^-2
@@ -455,10 +469,10 @@ Cl_true = compute_Cls(params)
 # linear shape
 def D_i(x,x_i,Delta_x):
     D = np.zeros(len(x))
-    x_sel = x[np.logical_and(x_i < x, x <= x_i+Delta_x/2.)]
-    D[np.logical_and(x_i < x, x <= x_i+Delta_x/2.)] = 1.-(2.*(x_sel-x_i)/Delta_x)
-    x_sel = x[np.logical_and(x_i >= x, x > x_i-Delta_x/2.)]
-    D[np.logical_and(x_i >= x, x > x_i-Delta_x/2.)] = 1.-(2.*(x_i-x_sel)/Delta_x)
+    x_sel = x[np.logical_and(x_i < x, x <= x_i+Delta_x)]
+    D[np.logical_and(x_i < x, x <= x_i+Delta_x)] = 1.-((x_sel-x_i)/Delta_x)
+    x_sel = x[np.logical_and(x_i >= x, x > x_i-Delta_x)]
+    D[np.logical_and(x_i >= x, x > x_i-Delta_x)] = 1.-((x_i-x_sel)/Delta_x)
     sum_D = np.sum(D*(x[1]-x[0]))
     D /= sum_D
     return D
@@ -553,6 +567,7 @@ Delta_z_s = np.mean(np.diff(z_s_cents_theo))
 # Compute the many samples of the shapes - linear and nearest
 D_i_many = np.zeros((N_zsamples_theo,N_many))
 D_i_many_near = np.zeros((N_zsamples_theo,N_many))
+
 for i in range(N_zsamples_theo):
     D_i_many[i,:] = D_i(z_many,z_s_cents_theo[i],Delta_z_s)
     D_i_many_near[i,:] = D_i_near(z_many,z_s_cents_theo[i],Delta_z_s)
@@ -566,6 +581,10 @@ plt.savefig("mD.png")
 plt.close()
 
 
+for i in range(N_zsamples_theo):
+    plt.plot(z_many, D_i_many[i,:])
+plt.savefig('shit.png')
+plt.close()
 # CURLY C INDEPENDENT OF REDSHIFT BIN
 # When computing, set the N_tomo_single to 1
 N_tomo_single = 1
@@ -616,7 +635,7 @@ for c, comb in enumerate(all_combos):
     t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
     
     # Noise term
-    if (i_tomo == j_tomo):
+    if (i_tomo == j_tomo) and False:
         # number density of galaxies
         N_gal = N_gal_bin[i_tomo]
         n_gal = N_gal/area_COSMOS # in rad^-2 
@@ -651,9 +670,11 @@ for c, comb in enumerate(all_combos):
     # This is the usual, proven way of recording the Cls
     Cl_fast[(N_ell*c):(N_ell*c)+N_ell] = CL
 
+#print (b_z)
 
-plt.loglog(ells, Cl_true[:N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ truth')
-plt.loglog(ells, Cl_fast[:N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ approx')
+ofs=3*N_ell
+plt.loglog(ells, Cl_true[ofs:ofs+N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ truth')
+plt.loglog(ells, Cl_fast[ofs:ofs+N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ approx')
 
 plt.xlabel(r'$\ell$')
 plt.ylabel(r'$C_{\ell}$')
