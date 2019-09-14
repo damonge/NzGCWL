@@ -672,12 +672,21 @@ for c, comb in enumerate(all_combos):
 
 #print (b_z)
 
-ofs=3*N_ell
+ofs=7*N_ell
+
+plt.subplot(2,1,1)
 plt.loglog(ells, Cl_true[ofs:ofs+N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ truth')
 plt.loglog(ells, Cl_fast[ofs:ofs+N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ approx')
+
 
 plt.xlabel(r'$\ell$')
 plt.ylabel(r'$C_{\ell}$')
 plt.legend()
+
+plt.subplot(2,1,2)
+
+plt.plot(ells, Cl_fast[ofs:ofs+N_ell]/Cl_true[ofs:ofs+N_ell])
+plt.xlabel(r'$\ell$')
+plt.ylabel('ratio')
 plt.savefig('Cls.png')
 plt.close()    
