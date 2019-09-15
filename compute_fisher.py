@@ -200,8 +200,8 @@ def compute_Cls(par,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k_arr=k_ar,z_arr=z_a
 
     # Assume a functional form of 0.95/D(a) for the bias parameters (notice how this plays in
     # the case of varying b(z)) it doesn't matter a lot in this case for we take finite diff
-    a_cent = 1./(1.+z_cent)
-    b_z *= 0.95/ccl.growth_factor(cosmo_fid,a_cent)
+    #a_cent = 1./(1.+z_cent)
+    #b_z *= 0.95/ccl.growth_factor(cosmo_fid,a_cent)
     
     # load the dndz parameters
     dndz_z = np.zeros((N_tomo,N_zsamples))
@@ -312,6 +312,7 @@ def compute_Cls(par,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k_arr=k_ar,z_arr=z_a
     COV_ALL = np.zeros((len(CL_ALL),len(CL_ALL)))    
     # COMPUTE COVARIANCE MATRIX: Cov(A,B)
     for c_A, comb_A in enumerate(all_combos):
+        # remove half the computations
         for c_B, comb_B in enumerate(all_combos):
             # pair A=(ti,tj), pair B=(tm,tn) at same ell, where t stands for either g or s
             i = comb_A[0]%N_tomo # redshift bin of tracer A_1 (i.e. along rows of Cov)

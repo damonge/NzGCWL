@@ -158,13 +158,17 @@ for i in range(N_tomo):
     #dndz_this[0]=0
     #dndz_this[-1]=0
 
-    ## a single triangle
+    ## a single triangle # TESTING
     dndz_this*=0
     dndz_this[i]=1.0
+    dndz_this[3]=1.0
 
     # area under the curve (must be 1)
     sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0])) # equals 1
-        
+
+    # TESTING
+    #dndz_this/=sum_dndz
+    
     # this is what values will be interpolated
     # (here because I have other codes where I use lorentzian, avg, etc)
     dndz_theo_fn = dndz_this
@@ -174,14 +178,16 @@ for i in range(N_tomo):
         # EXTRAPOLATION OUTSIDE RANGE -- DAVID SAYS NOT DONE FOR PYCCL
         #f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(dndz_theo_fn,np.array([dndz_this[0],dndz_this[-1]])),kind='cubic',fill_value='extrapolate')
         # NO EXTRAPOLATION
-        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='cubic',bounds_error=0,fill_value=0.)
+        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='cubic',bounds_error=0,fill_value=0.)
+        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='cubic',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
     elif interp == 'log': # NOT USED IN THIS CODE
         f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(np.log10(dndz_theo_fn),np.log10(np.array([dndz_this[0],dndz_this[-1]]))),kind='cubic',fill_value='extrapolate')  
     elif interp == 'nearest':
-        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=0.)
-    
+        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=0.)
+        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
     elif interp == 'linear':
         f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=0.)
+        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
 
     if interp == 'log': dndz_data[i,:] = 10**f(z_s_cents)
     else: dndz_data[i,:] = f(z_s_cents)
@@ -285,7 +291,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
         t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
         
         # NOISE
-        if (i == j) and False:
+        if (i == j):
             # number density of galaxies
             N_gal = N_gal_sample[i]            
             n_gal = N_gal/area_COSMOS # in rad^-2
@@ -469,12 +475,16 @@ Cl_true = compute_Cls(params)
 # linear shape
 def D_i(x,x_i,Delta_x):
     D = np.zeros(len(x))
+    
     x_sel = x[np.logical_and(x_i < x, x <= x_i+Delta_x)]
     D[np.logical_and(x_i < x, x <= x_i+Delta_x)] = 1.-((x_sel-x_i)/Delta_x)
     x_sel = x[np.logical_and(x_i >= x, x > x_i-Delta_x)]
     D[np.logical_and(x_i >= x, x > x_i-Delta_x)] = 1.-((x_i-x_sel)/Delta_x)
-    sum_D = np.sum(D*(x[1]-x[0]))
-    D /= sum_D
+
+    # TESTING
+    #sum_D = np.sum(D*(x[1]-x[0]))
+    #D /= sum_D
+
     return D
 
 # nearest shape
@@ -635,7 +645,7 @@ for c, comb in enumerate(all_combos):
     t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
     
     # Noise term
-    if (i_tomo == j_tomo) and False:
+    if (i_tomo == j_tomo):
         # number density of galaxies
         N_gal = N_gal_bin[i_tomo]
         n_gal = N_gal/area_COSMOS # in rad^-2 
@@ -672,7 +682,7 @@ for c, comb in enumerate(all_combos):
 
 #print (b_z)
 
-ofs=7*N_ell
+ofs=0#7*N_ell
 
 plt.subplot(2,1,1)
 plt.loglog(ells, Cl_true[ofs:ofs+N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ truth')
@@ -690,3 +700,23 @@ plt.xlabel(r'$\ell$')
 plt.ylabel('ratio')
 plt.savefig('Cls.png')
 plt.close()    
+
+fig = plt.figure(figsize=(30,25))
+for c, comb in enumerate(all_combos):
+    i_tomo = comb[0]%N_tomo # first redshift bin
+    j_tomo = comb[1]%N_tomo # second redshift bin
+    t_i = comb[0]//N_tomo # tracer type 0 means g and 1 means s
+    t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
+
+    plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
+    plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))                                                                           
+    
+    Cf = Cl_fast[(c*N_ell):(c*N_ell)+N_ell]
+    Ct = Cl_true[(c*N_ell):(c*N_ell)+N_ell]
+    # maybe add legend and make sure colors are the same for each type                                                                 
+    plt.plot(ells,Cf,lw=2.,ls='-',label=str(t_i*2+t_j))
+    plt.plot(ells,Ct,lw=2.,ls='-',label=str(t_i*2+t_j))
+    plt.legend()                                                                                                                       
+    plt.xscale('log')                                                                                                                  
+    plt.yscale('log')
+plt.savefig("Cl_all.png")
