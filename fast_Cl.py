@@ -161,11 +161,12 @@ for i in range(N_tomo):
     ## a single triangle # TESTING
     dndz_this*=0
     dndz_this[i]=1.0
-    dndz_this[3]=1.0
-
+    #dndz_this[3]=1.0
+    
+    
     # area under the curve (must be 1)
     sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0])) # equals 1
-
+    
     # TESTING
     #dndz_this/=sum_dndz
     
@@ -185,10 +186,11 @@ for i in range(N_tomo):
     elif interp == 'nearest':
         #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=0.)
         f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
+        
     elif interp == 'linear':
-        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=0.)
-        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
-
+        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=0.)
+        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
+        
     if interp == 'log': dndz_data[i,:] = 10**f(z_s_cents)
     else: dndz_data[i,:] = f(z_s_cents)
     
@@ -481,8 +483,13 @@ def D_i(x,x_i,Delta_x):
     x_sel = x[np.logical_and(x_i >= x, x > x_i-Delta_x)]
     D[np.logical_and(x_i >= x, x > x_i-Delta_x)] = 1.-((x_i-x_sel)/Delta_x)
 
-    # TESTING
-    #sum_D = np.sum(D*(x[1]-x[0]))
+    '''
+    # TESTING since this sums to a different value than the few samples case
+    if z_s_cents_theo[0] == x_i or z_s_cents_theo[-1] == x_i:
+        D *= 2.
+    '''
+    sum_D = np.sum(D*(x[1]-x[0]))
+    
     #D /= sum_D
 
     return D
@@ -573,17 +580,20 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
 N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
 z_many = np.linspace(z_s_cents_theo[0],z_s_cents_theo[-1],N_many)
 Delta_z_s = np.mean(np.diff(z_s_cents_theo))
+print('all_diff = ',np.diff(z_s_cents_theo)[:4])
 
 # Compute the many samples of the shapes - linear and nearest
 D_i_many = np.zeros((N_zsamples_theo,N_many))
 D_i_many_near = np.zeros((N_zsamples_theo,N_many))
 
 for i in range(N_zsamples_theo):
+
     D_i_many[i,:] = D_i(z_many,z_s_cents_theo[i],Delta_z_s)
     D_i_many_near[i,:] = D_i_near(z_many,z_s_cents_theo[i],Delta_z_s)
     plt.plot(z_many, D_i_many[i,:], label='linear z = %f'%(z_s_cents_theo[i]))
     plt.plot(z_many, D_i_many_near[i,:], label='nearest z = %f'%(z_s_cents_theo[i]))
-    
+
+
 plt.legend()
 plt.xlabel("z", fontsize=14)
 plt.ylabel("p(z)", fontsize=14)
@@ -592,6 +602,7 @@ plt.close()
 
 
 for i in range(N_zsamples_theo):
+    plt.plot(z_many, D_i_many[i,:])
     plt.plot(z_many, D_i_many[i,:])
 plt.savefig('shit.png')
 plt.close()
@@ -713,10 +724,13 @@ for c, comb in enumerate(all_combos):
     
     Cf = Cl_fast[(c*N_ell):(c*N_ell)+N_ell]
     Ct = Cl_true[(c*N_ell):(c*N_ell)+N_ell]
+    if (t_i*2+t_j == 0): int_t='gg'
+    if (t_i*2+t_j == 1): int_t='sg'
+    if (t_i*2+t_j == 3): int_t='ss'
     # maybe add legend and make sure colors are the same for each type                                                                 
-    plt.plot(ells,Cf,lw=2.,ls='-',label=str(t_i*2+t_j))
-    plt.plot(ells,Ct,lw=2.,ls='-',label=str(t_i*2+t_j))
+    plt.plot(ells,Cf,lw=2.,ls='-',label=int_t+' fast')
+    plt.plot(ells,Ct,lw=2.,ls='-',label=int_t+' true')
     plt.legend()                                                                                                                       
     plt.xscale('log')                                                                                                                  
     plt.yscale('log')
-plt.savefig("Cl_all.png")
+plt.savefig("Cl_all.pdf")
