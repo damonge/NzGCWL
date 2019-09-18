@@ -597,7 +597,9 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
 
 # generate the shapes
 N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
-z_many = np.linspace(z_s_cents_theo[0],z_s_cents_theo[-1],N_many)
+#z_many = np.linspace(z_s_cents_theo[0],z_s_cents_theo[-1],N_many) # TESTING
+#z_many = np.linspace(z_ini_sample,z_end_sample,N_many+1)
+z_many = z_s_cents
 Delta_z_s = np.mean(np.diff(z_s_cents_theo))
 print('all_diff = ',np.diff(z_s_cents_theo)[:4])
 
