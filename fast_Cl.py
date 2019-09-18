@@ -10,6 +10,7 @@ import matplotlib
 import copy
 import pyccl as ccl
 import sys
+#export PYTHONPATH=../LSSLike/desclss/:$PYTHONPATH
 import hod 
 #%reload(hod)
 import hod_funcs_evol_fit
@@ -314,6 +315,14 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
             tracer_z2 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
                                                dndz=(z_cent, dndz_z[j,:]),mag_bias=None, \
                                                has_rsd=False)
+
+            if (i==2) and (j==3):
+                f=open('b.txt','w')
+                for q1,q2,q3,q4 in zip(z_cent,b_z,dndz_z[i,:],dndz_z[j,:]):
+                    f.write("%g %g %g %g\n"%(q1,q2,q3,q4))
+                f.close()
+
+
             cl_gg = ccl.angular_cl(cosmo_fid, tracer_z1, tracer_z2, ell, p_of_k_a=pk_gg)
             cl_gg_no = cl_gg + noise_gal
 
@@ -543,7 +552,8 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
         j = comb[1]%N_tomo_single # second redshift bin (ALWAYS 0 HERE)
         t_i = comb[0]//N_tomo_single # tracer type 0 means g and 1 means s
         t_j = comb[1]//N_tomo_single # tracer type 0 means g and 1 means s
-                
+
+        
         # Now create corresponding Cls with pk2D objects matched to pk
         if t_i*2+t_j == 0: # this is gg
             tracer_z1 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
@@ -552,6 +562,15 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
             tracer_z2 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
                                                dndz=(z_cent, dndz_z_single_j[j,:]),mag_bias=None, \
                                                has_rsd=False)
+
+            ## AS DEBUG
+            if (i_zs==2 and j_zs==3):
+                print ("-------------------------")
+                f=open('a.txt','w')
+                for q1,q2,q3,q4 in zip(z_cent,b_z,dndz_z_single_i[i,:],dndz_z_single_j[j,:]):
+                    f.write("%g %g %g %g\n"%(q1,q2,q3,q4))
+                f.close()
+
             cl_gg = ccl.angular_cl(cosmo_fid, tracer_z1, tracer_z2, ell, p_of_k_a=pk_gg)
             cl_gg_no = cl_gg + 0.
             CL_ALL[(N_ell*c):(N_ell*c)+N_ell] = cl_gg_no
@@ -693,7 +712,7 @@ for c, comb in enumerate(all_combos):
 
 #print (b_z)
 
-ofs=0#7*N_ell
+ofs=2*N_ell
 
 plt.subplot(2,1,1)
 plt.loglog(ells, Cl_true[ofs:ofs+N_ell], label=r'$\mathrm{gg} \alpha=\beta=0$ truth')
