@@ -304,8 +304,8 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
             
             
             # Adding noise
-            noise_gal = 1./n_gal
-            noise_shape = sigma_e2[i]/n_gal
+            noise_gal = 0.#TESTING 1./n_gal
+            noise_shape = 0.#TESTING sigma_e2[i]/n_gal
         else:
             noise_gal = 0.
             noise_shape = 0.
@@ -688,8 +688,9 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False):
         
             CL[k] = np.dot(np.dot(di,mat_cC[:,:,N_ell*type_xy+k]),dj)
             if (compute_ders == True):
-                for a in range(N_zsamples_theo):
-                    dCl_fast_all[i_tomo*N_zsamples_theo+a,(N_ell*c):(N_ell*c)+k] = 2.*np.dot(mat_cC[a,:,N_ell*type_xy+k],dj)
+                dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(mat_cC[:,:,N_ell*type_xy+k],dj)).T#2. TESTING
+                #for a in range(N_zsamples_theo):
+                #    dCl_fast_all[i_tomo*N_zsamples_theo+a,(N_ell*c)+k] = 2.*np.dot(mat_cC[a,:,N_ell*type_xy+k],dj)
         # Finally add noise depending on type of correlation
         CL += noise
         # This is the usual, proven way of recording the Cls
@@ -702,11 +703,16 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False):
 #print (b_z)
 
 # NUMERICAL DERIVATIVE
-def compute_num_derivs(dndz_zij,ind_i,ind_j,dval):
+def compute_num_derivs(j,dval):
     dndz_z = dndz_data_theo.copy()
-    dndz_z[ind_i,ind_j] = dndz_zij+dval
+    k = j % N_zsamples_theo # gives sample
+    i = j // N_zsamples_theo # gives tomo
+
+    print('tomo_i, zsam_k = ',i,k)
+    dndz_ik = dndz_z[i,k]
+    dndz_z[i,k] = dndz_ik+dval
     clp = compute_fast_Cls(dndz_z,mat_C)
-    dndz_z[ind_i,ind_j] = dndz_zij-dval
+    dndz_z[i,k] = dndz_ik-dval
     clm = compute_fast_Cls(dndz_z,mat_C)
     return (clp-clm)/(2*dval)
 
@@ -718,8 +724,6 @@ temp = np.arange(2*N_tomo)
 temp = np.vstack((temp,temp)).T
 combs = np.array(list(combinations(range(2*N_tomo),2)))
 all_combos = np.vstack((temp,combs))
-
-
 
 '''
 # TESTING
@@ -760,17 +764,8 @@ dCldp_fast_alpha[:,:] = compute_fast_Cls(dndz_z,mat_C,compute_ders=True)
 
 dCldp_num_alpha=np.zeros((N_tomo*N_zsamples_theo,int(N_tomo*(2*N_tomo+1)*N_ell)))
 for j in np.arange(N_tomo*N_zsamples_theo):
-    k = j % N_zsamples_theo # gives sample
-    i = j // N_zsamples_theo # gives tomo
-    # LOAD THE DISCRETE DNDZS
-    print('j = ',j)
-    dndz_ik = dndz_data_theo[i,k]
-    #dCldp_fast_alpha[j,:] = compute_fast_derivs(dndz_ik,i,k,dndz_dval)
-    dCldp_num_alpha[j,:] = compute_num_derivs(dndz_ik,i,k,dndz_dval)
-    
+    dCldp_num_alpha[j,:] = compute_num_derivs(j,dndz_dval)
     j += 1
-
-        
 
 #MORE PLOTS
 
@@ -785,19 +780,19 @@ for N_plot in range(N_tomo*N_zsamples_theo):
         
         dCt = dCldp_num_alpha[N_plot,(c*N_ell):(c*N_ell)+N_ell]
         dCf = dCldp_fast_alpha[N_plot,(c*N_ell):(c*N_ell)+N_ell]
-        if (t_i*2+t_j == 0): int_t='gg'
-        if (t_i*2+t_j == 1): int_t='sg'
-        if (t_i*2+t_j == 3): int_t='ss'
+        if (t_i*2+t_j == 0): int_t='gg'; c='red'
+        if (t_i*2+t_j == 1): int_t='sg'; c='purple'
+        if (t_i*2+t_j == 3): int_t='ss'; c='blue'
         # maybe add legend and make sure colors are the same for each type
         
         plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
         plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))                                                                           
-        plt.plot(ells,dCf,lw=2.,ls='-',label=int_t+' fast')
-        plt.plot(ells,dCt,lw=2.,ls='-',label=int_t+' num')
+        plt.plot(ells,dCf,lw=2.,ls='--',color=c,label=int_t+' fast')
+        plt.plot(ells,dCt,lw=2.,ls='-',color=c,label=int_t+' num',alpha=0.2)
         #print(np.mean(1-dCf/dCt))
         plt.legend()                                                                                                  
         plt.xscale('log')
-        #plt.yscale('log')
+        plt.yscale('log')
     plt.savefig("dCl_all_"+str(N_plot)+".pdf")
 
 
