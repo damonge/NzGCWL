@@ -1,3 +1,4 @@
+# FOR NOW WORKS ONLY WITH NEAREST
 import matplotlib
 matplotlib.use('Agg')
 import numpy as np
@@ -35,7 +36,7 @@ zsam = sys.argv[2]
 
 # what interpolation scheme do we want
 # OUR EQUATIONS SHOULD WORK FOR NEAREST AND LINEAR
-interp = 'linear'#'log'#'nearest'#'spline' #'linear'
+interp = 'nearest'#'log'#'nearest'#'spline' #'linear'
 
 # constants
 deg_to_rad = np.pi/180.
@@ -156,20 +157,18 @@ for i in range(N_tomo):
                                             zt_edges=(z_ini_sample, z_end_sample),          # Sampling range
                                             zt_nbins=N_zsamples_theo)         # Number of samples
 
-    #dndz_this[0]=0
-    #dndz_this[-1]=0
-
-    ## a single triangle # TESTING
-    dndz_this*=0
-    dndz_this[i]=1.0
-    #dndz_this[3]=1.0
-    
+    ## a single triangle
+    #dndz_this*=0
+    #dndz_this[i]=1.0
+    #dndz_this[1]=1.0
     
     # area under the curve (must be 1)
     sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0])) # equals 1
-    
-    # TESTING
-    #dndz_this/=sum_dndz
+
+    # Important second line of normalization
+    #dndz_this/=sum_dndz # DOESN'T MATTER AS SUM_DNDZ = 1
+    dndz_this*=(z_edges_theo[1]-z_edges_theo[0]) # VERY VERY VERY IMPORTANT
+
     
     # this is what values will be interpolated
     # (here because I have other codes where I use lorentzian, avg, etc)
@@ -190,10 +189,14 @@ for i in range(N_tomo):
         
     elif interp == 'linear':
         #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=0.)
-        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
+        f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(dndz_theo_fn,np.array([dndz_theo_fn[0],dndz_theo_fn[-1]])),kind='linear',bounds_error=0,fill_value=0.)
         
     if interp == 'log': dndz_data[i,:] = 10**f(z_s_cents)
     else: dndz_data[i,:] = f(z_s_cents)
+
+    # Normalization not necessary
+    #sum_dndz = np.sum(dndz_data[i,:]*(z_s_cents[1]-z_s_cents[0])) # equals 1
+    #dndz_data[i,:] = dndz_data[i,:]/sum_dndz # DOESN'T MATTER SINCE PYCCL NORMALIZES
     
     # record discrete dndzs
     dndz_data_theo[i,:] = dndz_this
@@ -316,13 +319,6 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
                                                dndz=(z_cent, dndz_z[j,:]),mag_bias=None, \
                                                has_rsd=False)
 
-            if (i==2) and (j==3):
-                f=open('b.txt','w')
-                for q1,q2,q3,q4 in zip(z_cent,b_z,dndz_z[i,:],dndz_z[j,:]):
-                    f.write("%g %g %g %g\n"%(q1,q2,q3,q4))
-                f.close()
-
-
             cl_gg = ccl.angular_cl(cosmo_fid, tracer_z1, tracer_z2, ell, p_of_k_a=pk_gg)
             cl_gg_no = cl_gg + noise_gal
 
@@ -336,7 +332,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
             cl_gs = ccl.angular_cl(cosmo_fid, tracer_z1, tracer_z2, ell, p_of_k_a=pk_gm)
             cl_gs_no = cl_gs
             CL_ALL[(N_ell*c):(N_ell*c)+N_ell] = cl_gs_no
-
+            
         elif t_i*2+t_j == 3: # this is ss
             
             tracer_z1 = ccl.WeakLensingTracer(cosmo_fid, dndz=(z_cent, dndz_z[i,:]))
@@ -486,21 +482,14 @@ Cl_true = compute_Cls(params)
 # linear shape
 def D_i(x,x_i,Delta_x):
     D = np.zeros(len(x))
-    
     x_sel = x[np.logical_and(x_i < x, x <= x_i+Delta_x)]
     D[np.logical_and(x_i < x, x <= x_i+Delta_x)] = 1.-((x_sel-x_i)/Delta_x)
     x_sel = x[np.logical_and(x_i >= x, x > x_i-Delta_x)]
     D[np.logical_and(x_i >= x, x > x_i-Delta_x)] = 1.-((x_i-x_sel)/Delta_x)
 
-    '''
-    # TESTING since this sums to a different value than the few samples case
-    if z_s_cents_theo[0] == x_i or z_s_cents_theo[-1] == x_i:
-        D *= 2.
-    '''
     sum_D = np.sum(D*(x[1]-x[0]))
     
-    #D /= sum_D
-
+    #D /= sum_D # normalization doesn't matter
     return D
 
 # nearest shape
@@ -508,8 +497,7 @@ def D_i_near(x,x_i,Delta_x):
     D = np.zeros(len(x))
     D[np.logical_and(x > x_i-Delta_x/2., x <= x_i+Delta_x/2.)] = 1.
     sum_D = np.sum(D*(x[1]-x[0]))
-    D /= sum_D
-    
+    #D /= sum_D # normalization doesn't matter
     return D 
 
 # Computing curly C matrix entries for every N_t_s*(2 N_t_s+1)*N_ell = 1(2*1+1)*10 = 30 entries
@@ -533,8 +521,12 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
     dndz_z_single_j = np.zeros((N_tomo_single,N_zsamples))
     # D_i_many is defined below
     for i_z in range(N_tomo_single):
-        dndz_z_single_i[i_z,:] = D_i_many[i_zs,:]
-        dndz_z_single_j[i_z,:] = D_i_many[j_zs,:]
+        if interp == 'nearest':
+            dndz_z_single_i[i_z,:] = D_i_many_near[i_zs,:]
+            dndz_z_single_j[i_z,:] = D_i_many_near[j_zs,:]
+        elif interp == 'linear':
+            dndz_z_single_i[i_z,:] = D_i_many[i_zs,:]
+            dndz_z_single_j[i_z,:] = D_i_many[j_zs,:]
 
     # per type gg gs ss
     tot_corr = N_ell*(N_tomo_single*(2*N_tomo_single+1))
@@ -563,18 +555,11 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
                                                dndz=(z_cent, dndz_z_single_j[j,:]),mag_bias=None, \
                                                has_rsd=False)
 
-            ## AS DEBUG
-            if (i_zs==2 and j_zs==3):
-                print ("-------------------------")
-                f=open('a.txt','w')
-                for q1,q2,q3,q4 in zip(z_cent,b_z,dndz_z_single_i[i,:],dndz_z_single_j[j,:]):
-                    f.write("%g %g %g %g\n"%(q1,q2,q3,q4))
-                f.close()
-
             cl_gg = ccl.angular_cl(cosmo_fid, tracer_z1, tracer_z2, ell, p_of_k_a=pk_gg)
             cl_gg_no = cl_gg + 0.
             CL_ALL[(N_ell*c):(N_ell*c)+N_ell] = cl_gg_no
 
+        
         elif t_i*2+t_j == 1: # this is gs
             tracer_z1 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
                                                dndz=(z_cent, dndz_z_single_i[i,:]),mag_bias=None, \
@@ -597,11 +582,9 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
 
 # generate the shapes
 N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
-#z_many = np.linspace(z_s_cents_theo[0],z_s_cents_theo[-1],N_many) # TESTING
-#z_many = np.linspace(z_ini_sample,z_end_sample,N_many+1)
 z_many = z_s_cents
 Delta_z_s = np.mean(np.diff(z_s_cents_theo))
-print('all_diff = ',np.diff(z_s_cents_theo)[:4])
+
 
 # Compute the many samples of the shapes - linear and nearest
 D_i_many = np.zeros((N_zsamples_theo,N_many))
@@ -621,12 +604,6 @@ plt.ylabel("p(z)", fontsize=14)
 plt.savefig("mD.png")
 plt.close()
 
-
-for i in range(N_zsamples_theo):
-    plt.plot(z_many, D_i_many[i,:])
-    plt.plot(z_many, D_i_many[i,:])
-plt.savefig('shit.png')
-plt.close()
 # CURLY C INDEPENDENT OF REDSHIFT BIN
 # When computing, set the N_tomo_single to 1
 N_tomo_single = 1
@@ -706,6 +683,7 @@ for c, comb in enumerate(all_combos):
         # Here we compute the Cls analytically using the curly C matrix
         di = dndz_z[i_tomo,:].reshape(1,N_zsamples_theo)
         dj = dndz_z[j_tomo,:].reshape(N_zsamples_theo,1)
+        
         CL[k] = np.dot(np.dot(di,mat_C[:,:,N_ell*type_xy+k]),dj)
     # Finally add noise depending on type of correlation
     CL += noise
@@ -733,25 +711,50 @@ plt.ylabel('ratio')
 plt.savefig('Cls.png')
 plt.close()    
 
+
 fig = plt.figure(figsize=(30,25))
 for c, comb in enumerate(all_combos):
     i_tomo = comb[0]%N_tomo # first redshift bin
     j_tomo = comb[1]%N_tomo # second redshift bin
     t_i = comb[0]//N_tomo # tracer type 0 means g and 1 means s
     t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
-
-    plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
-    plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))                                                                           
     
     Cf = Cl_fast[(c*N_ell):(c*N_ell)+N_ell]
     Ct = Cl_true[(c*N_ell):(c*N_ell)+N_ell]
     if (t_i*2+t_j == 0): int_t='gg'
     if (t_i*2+t_j == 1): int_t='sg'
     if (t_i*2+t_j == 3): int_t='ss'
-    # maybe add legend and make sure colors are the same for each type                                                                 
+    # maybe add legend and make sure colors are the same for each type
+
+    plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
+    plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))                                                                           
     plt.plot(ells,Cf,lw=2.,ls='-',label=int_t+' fast')
     plt.plot(ells,Ct,lw=2.,ls='-',label=int_t+' true')
     plt.legend()                                                                                                                       
     plt.xscale('log')                                                                                                                  
     plt.yscale('log')
 plt.savefig("Cl_all.pdf")
+
+fig = plt.figure(figsize=(30,25))
+for c, comb in enumerate(all_combos):
+    i_tomo = comb[0]%N_tomo # first redshift bin
+    j_tomo = comb[1]%N_tomo # second redshift bin
+    t_i = comb[0]//N_tomo # tracer type 0 means g and 1 means s
+    t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
+    
+    Cf = Cl_fast[(c*N_ell):(c*N_ell)+N_ell]
+    Ct = Cl_true[(c*N_ell):(c*N_ell)+N_ell]
+    if (t_i*2+t_j == 0): int_t='gg'
+    if (t_i*2+t_j == 1): int_t='sg'
+    if (t_i*2+t_j == 3): int_t='ss'
+    # maybe add legend and make sure colors are the same for each type
+
+    plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
+    plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))
+    print(np.mean(np.abs(1-Cf/Ct)))
+    plt.plot(ells,np.abs(1-Cf/Ct),lw=2.,ls='-',label=int_t)
+    plt.legend()                                                                                                                       
+    plt.xscale('log')                                                                                                                  
+    #plt.yscale('log')
+    
+plt.savefig("Cl_rat.pdf")
