@@ -185,7 +185,8 @@ for i in range(N_tomo):
         f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(np.log10(dndz_theo_fn),np.log10(np.array([dndz_this[0],dndz_this[-1]]))),kind='cubic',fill_value='extrapolate')  
     elif interp == 'nearest':
         #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=0.)
-        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
+        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='nearest',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
+        f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(dndz_theo_fn,np.array([dndz_theo_fn[0],dndz_theo_fn[-1]])),kind='nearest',bounds_error=0,fill_value=0.)
         
     elif interp == 'linear':
         #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=0.)
@@ -283,12 +284,6 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
     temp = np.vstack((temp,temp)).T
     combs = np.array(list(combinations(range(2*N_tomo),2)))
     all_combos = np.vstack((temp,combs))
-
-    
-    #print (all_combos)
-    #print (all_combos.shape)
-    #print (tot_corr/N_ell)
-    #stop()
     
     for c, comb in enumerate(all_combos):
         i = comb[0]%N_tomo # first redshift bin
@@ -304,8 +299,8 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
             
             
             # Adding noise
-            noise_gal = 0.#TESTING 1./n_gal
-            noise_shape = 0.#TESTING sigma_e2[i]/n_gal
+            noise_gal = 1./n_gal
+            noise_shape = sigma_e2[i]/n_gal
         else:
             noise_gal = 0.
             noise_shape = 0.
@@ -478,7 +473,6 @@ Cl_true = compute_Cls(params)
 # ___________________________________
 #          COMPUTING CURLY C
 # ___________________________________
-
 # linear shape
 def D_i(x,x_i,Delta_x):
     D = np.zeros(len(x))
@@ -581,7 +575,7 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
             
 
 # =====================================================
-#                           curly C 
+#                           curly C comment out for fastness
 # =====================================================
 
 # generate the shapes
@@ -688,9 +682,11 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False):
         
             CL[k] = np.dot(np.dot(di,mat_cC[:,:,N_ell*type_xy+k]),dj)
             if (compute_ders == True):
-                dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(mat_cC[:,:,N_ell*type_xy+k],dj)).T#2. TESTING
-                #for a in range(N_zsamples_theo):
-                #    dCl_fast_all[i_tomo*N_zsamples_theo+a,(N_ell*c)+k] = 2.*np.dot(mat_cC[a,:,N_ell*type_xy+k],dj)
+                if (i_tomo == j_tomo):
+                    dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(mat_cC[:,:,N_ell*type_xy+k],dj)).T+(np.dot(di,mat_cC[:,:,N_ell*type_xy+k]))
+                else:
+                    dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(mat_cC[:,:,N_ell*type_xy+k],dj)).T
+                    dCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(di,mat_cC[:,:,N_ell*type_xy+k]))
         # Finally add noise depending on type of correlation
         CL += noise
         # This is the usual, proven way of recording the Cls
@@ -700,7 +696,6 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False):
         return Cl_fast_all
     else:
         return dCl_fast_all
-#print (b_z)
 
 # NUMERICAL DERIVATIVE
 def compute_num_derivs(j,dval):
@@ -716,58 +711,24 @@ def compute_num_derivs(j,dval):
     clm = compute_fast_Cls(dndz_z,mat_C)
     return (clp-clm)/(2*dval)
 
-
+# curly C and delta dndz
 mat_C = np.load("mat_C.npy")
 dndz_dval = .02
-
 temp = np.arange(2*N_tomo)
 temp = np.vstack((temp,temp)).T
 combs = np.array(list(combinations(range(2*N_tomo),2)))
 all_combos = np.vstack((temp,combs))
 
-'''
-# TESTING
+# load the dndzs
 dndz_z = dndz_data_theo.copy()
-Cl_fast = compute_fast_Cls(dndz_z,mat_C)
 
-# PLOTTING TESTING
-fig = plt.figure(figsize=(30,25))
-for c, comb in enumerate(all_combos):
-    i_tomo = comb[0]%N_tomo # first redshift bin
-    j_tomo = comb[1]%N_tomo # second redshift bin
-    t_i = comb[0]//N_tomo # tracer type 0 means g and 1 means s
-    t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
-    
-    Cf = Cl_fast[(c*N_ell):(c*N_ell)+N_ell]
-    Ct = Cl_true[(c*N_ell):(c*N_ell)+N_ell]
-    if (t_i*2+t_j == 0): int_t='gg'
-    if (t_i*2+t_j == 1): int_t='sg'
-    if (t_i*2+t_j == 3): int_t='ss'
-    # maybe add legend and make sure colors are the same for each type
 
-    plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
-    plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))                                                                           
-    plt.plot(ells,Cf,lw=2.,ls='-',label=int_t+' fast')
-    plt.plot(ells,Ct,lw=2.,ls='-',label=int_t+' true')
-
-    print(np.mean(1-Cf/Ct))
-    
-    plt.legend()                                                                                                                       
-    plt.xscale('log')                                                                                                                  
-    plt.yscale('log')
-plt.savefig("Cl_all.pdf")
-'''
-
-dndz_z = dndz_data_theo.copy()
-dCldp_fast_alpha=np.zeros((N_tomo*N_zsamples_theo,int(N_tomo*(2*N_tomo+1)*N_ell)))
-dCldp_fast_alpha[:,:] = compute_fast_Cls(dndz_z,mat_C,compute_ders=True)
-
-dCldp_num_alpha=np.zeros((N_tomo*N_zsamples_theo,int(N_tomo*(2*N_tomo+1)*N_ell)))
+# COMPUTE FAST AND NUMERICAL DERIVATIVES
+dCldp_fast_alpha = compute_fast_Cls(dndz_z,mat_C,compute_ders=True)
+dCldp_num_alpha = np.zeros((N_tomo*N_zsamples_theo,int(N_tomo*(2*N_tomo+1)*N_ell)))
 for j in np.arange(N_tomo*N_zsamples_theo):
     dCldp_num_alpha[j,:] = compute_num_derivs(j,dndz_dval)
     j += 1
-
-#MORE PLOTS
 
 for N_plot in range(N_tomo*N_zsamples_theo):
     fig = plt.figure(figsize=(30,25))
@@ -781,162 +742,22 @@ for N_plot in range(N_tomo*N_zsamples_theo):
         dCt = dCldp_num_alpha[N_plot,(c*N_ell):(c*N_ell)+N_ell]
         dCf = dCldp_fast_alpha[N_plot,(c*N_ell):(c*N_ell)+N_ell]
         if (t_i*2+t_j == 0): int_t='gg'; c='red'
-        if (t_i*2+t_j == 1): int_t='sg'; c='purple'
+        if (t_i*2+t_j == 1): int_t='gs'; c='purple'
         if (t_i*2+t_j == 3): int_t='ss'; c='blue'
         # maybe add legend and make sure colors are the same for each type
         
         plt.subplot(N_tomo, N_tomo, N_tomo*i_tomo+j_tomo+1)                                                                                          
         plt.title("z=%f x z=%f"%(z_bin_cents[i_tomo],z_bin_cents[j_tomo]))                                                                           
-        plt.plot(ells,dCf,lw=2.,ls='--',color=c,label=int_t+' fast')
-        plt.plot(ells,dCt,lw=2.,ls='-',color=c,label=int_t+' num',alpha=0.2)
-        #print(np.mean(1-dCf/dCt))
+        plt.plot(ells,np.abs(dCf),lw=2.,ls='--',color=c,label=int_t+' fast')
+        plt.plot(ells,dCt,lw=2.,ls='-',color=c,label=int_t+' num',alpha=0.4)
+        #print("diff = ",np.mean(1-dCf/dCt))
+        #print("dCf = ",np.mean(dCf))
+        #print("dCt = ",np.mean(dCt))
         plt.legend()                                                                                                  
         plt.xscale('log')
         plt.yscale('log')
-    plt.savefig("dCl_all_"+str(N_plot)+".pdf")
-
-
-
-quit()
-
-dCldp_alpha=np.zeros((npar_vary,int(N_tomo*(2*N_tomo+1)*N_ell)))
-def fisher(x):
-    #Compute derivatives of the data vector
-    print("WHAT")
-    for i,nam in enumerate(sorted(params_vary)):
-        print("Parameter ",nam,", which is number ",(i+1),"out of ",npar_vary)
-        dCldp_alpha[i,:]=compute_derivs(params,nam)
-    #Compute Fisher matrix, covariance and correlation matrix
-    Cov = compute_Cls(params,compute_cov=True)
-    ICov = la.inv(Cov)
-    fisher = np.dot(dCldp_alpha,np.dot(ICov,dCldp_alpha.T))
-    return fisher
-
-def fun(x):
-    print("x-x0 = ",np.sum(x-x0))
-    x = x.reshape(N_tomo,N_zsamples)
-    for i in np.arange(N_tomo):
-        for k in np.arange(N_zsamples):
-            params['dndz_%02d_%02d'%(i,k)]['val'] = x[i,k]
-    print(x.shape)
-    Cl_theo = compute_Cls(params)
-    Cov = compute_Cls(params,compute_cov=True)
-    ICov = la.inv(Cov)
-    Delta_Cl = (Cl_theo-Cl_true).reshape(1,len(Cl_theo))
-    chi2 = np.dot(np.dot(Delta_Cl,ICov),Delta_Cl.T)[0][0]
-    print(chi2)
-    return chi2
-
-
-
-
-
-
-
-
-
-
-
-quit()
-
-
-# =======================================
-#            CHI2
-# =======================================
-
-def fun(x):
-    chi2_s = np.zeros(N_tomo)
-    print("sum(x_diff) = ",np.sum(x-x0))
-    
-    for i in range(N_tomo):
-        dndz_this = x[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]
-        sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0]))
         
-        if raw == True:
-            for k in range(N_zsamples-1):
-                params['dndz_%02d_%02d'%(i,k)]['val'] = dndz_this[k]
-            params['dndz_%02d_%02d'%(i,N_zsamples-1)]['val'] = (1-sum_dndz)/(z_edges_theo[1]-z_edges_theo[0])
-            chi2_s[i] = 1.e11*(np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))-1)
-            
-            continue
-        mean = np.sum(z_s_cents_theo*dndz_this)/np.sum(dndz_this)           
-        sigma = np.sqrt(np.sum(dndz_this*(z_s_cents_theo-mean)**2)/np.sum(dndz_this))
-        print("sigma = ",sigma)
-        if sigma < 0.01: sigma = 0.2
-        if np.isnan(sigma) == True: sigma = 0.2
-        #popt,pcov = curve_fit(gaussian,z_s_cents_theo,dndz_this,p0=[mean,sigma])
-        #g_fit = gaussian(z_s_cents,*popt)
-        g_fit = gaussian(z_s_cents,mean,sigma)
-        # TESTING
-        #g_fit *= sum_dndz/np.sum(g_fit*(z_s_edges[1]-z_s_edges[0]))
-        for k in range(N_zsamples):
-            params['dndz_%02d_%02d'%(i,k)]['val'] = g_fit[k]
-        chi2_s[i] = 1.e11*(np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))-1)
-    #Cov, Cl_theo = compute_Cls(params)
-    Cl_theo = compute_Cls(params,compute_only_cl=True)
-    #lam, R = la.eig(Cov)
-    #ICov = la.inv(Cov)
-    Delta_Cl = (Cl_theo-Cl_true).reshape(len(Cl_theo),1)
-    #rDCl = np.dot(R.T,Delta_Cl) # and formula is R L R.T = Cov
-    #chi2 = (rDCl.flatten()/np.sqrt(lam)).real
-    chi2 = np.dot(np.dot(Delta_Cl.T,ICov),Delta_Cl)[0][0]
-    #print("sum res^2 = ",np.sum(chi2**2,axis=0))
-    print("chi^2 = ",(chi2))
-    return chi2
+    tomo = N_plot//N_zsamples_theo
+    zsamp = N_plot%N_zsamples_theo
+    plt.savefig("dCl_all_tomo_"+str(tomo)+"_zsamp_"+str(zsamp)+".pdf")
 
-const = "cons = ("
-for i in range(N_tomo): const += "{'type': 'eq', 'fun': lambda x:  np.sum(x["+str(i)+"*N_zsamples:"+str(i)+"*N_zsamples+N_zsamples])-1},"
-const += ")"
-exec(const)
-
-
-x0 = np.zeros(N_tomo*(N_zsamples_theo-1))
-full_x0 = np.zeros(N_tomo*(N_zsamples_theo))
-chi2_s = np.zeros(N_tomo)
-for i in range(N_tomo):
-    if True:
-        x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_data_theo[i,:-1]#+0.01 # TESTING
-        continue
-    dndz_this = gaussian(z_s_cents_theo,z_bin_cents[i],0.2)
-    dndz_this /= np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))
-    x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_this[:-1]
-    chi2_s[i] = (np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))-1)
-
-#x0 = np.array([ 1.55187484e+00,  2.20285102e-01,  6.87258597e-04,  1.38896539e+00, -4.01761932e-02,  2.64249287e-01])
-for i in range(N_tomo):
-    full_x0[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)-1] = x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]
-    sum_dndz = np.sum(x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]*(z_s_edges_theo[1]-z_s_edges_theo[0]))
-    full_x0[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)/(z_edges_theo[1]-z_edges_theo[0])
-print(full_x0)
-print(np.sum(chi2_s)); # starting with 0 for no noise and 1000 for noise
-print(fun(x0));quit()
-
-
-# =======================================
-#            NOISE
-# =======================================
-Cov = compute_Cls(params,compute_cov=True)
-X = la.cholesky(Cov).T
-
-N_draws = 100
-Nl_all = np.zeros((N_ell*N_tomo*(2*N_tomo+1),N_draws))
-
-for i in range(N_draws):
-    R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))
-    Nl = np.dot(X,R)
-    Nl_all[:,i] = Nl
-
-Cl_true += Nl
-
-'''
-Cl_theo = compute_Cls(params)
-# TESTING
-fig = plt.figure(figsize=(30,25))
-ICov = compute_Cls(params,compute_inv_cov=True)
-# TESTING
-plt.savefig("Cl_err.pdf");
-plt.close()
-quit()
-chi2 = np.dot(np.dot(Delta_Cl,ICov),Delta_Cl.T)[0][0]
-print(chi2)
-'''
