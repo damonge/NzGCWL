@@ -118,6 +118,10 @@ def check_symmetric(a, rtol=1e-05, atol=1e-08):
 def is_pos_def(x):
     return np.all(np.linalg.eigvals(x) > 0)
 
+# 1d gaussian
+def gaussian(x, mu, sig):
+    return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
 def get_nz_from_photoz_bins(zp_code,zp_ini,zp_end,zt_edges,zt_nbins):
     # Select galaxies in photo-z bin
     sel=(cat[zp_code]<=zp_end) & (cat[zp_code]>zp_ini)
@@ -488,14 +492,34 @@ Cl_true = compute_Cls(params)
 # adding noise                                                                                   
 #Cl_true += Nl
 
-# ___________________________________
-#       END OF COMPUTING TRUE CLs
-# ___________________________________
+# _______________________________________________
+#               REGULARIZATION PRIOR
+# _______________________________________________
 
+dndz_dval = 0.02
+sigma1 = 0.01
+sigma2 = 0.01
+D1 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
 
-# LOOK HERE! EVERYTHING BELOW IS INDEPENDENT
-# (APART FROM ADDING NOISE)
-# ABOVE IS ONLY USED FOR COMPUTING CL_TRUE
+lam = np.zeros(N_zsamples_theo*N_tomo)
+for j in range(N_zsamples_theo*N_tomo):
+    i_tomo = j//N_zsamples_theo
+    i_zsam = j%N_zsamples_theo
+    lam *= 0
+    if (i_zsam+1<N_zsamples_theo):
+        ip1 = j+1
+        lam[ip1] = -1./dndz_dval 
+    if (i_zsam-1>=0):
+        im1 = j-1
+        lam[im1] = 1./dndz_dval 
+    tmp = lam.reshape(N_zsamples_theo*N_tomo,1)
+    D1 += np.dot(tmp,tmp.T)
+
+D1 /= sigma1**2.
+print(D1)
+
+D = D1
+
 
 # ___________________________________
 #          COMPUTING CURLY C
@@ -653,10 +677,13 @@ np.save("mat_C.npy",mat_C)
 #  LOADING CURLY C AND ADDING NOISE
 # ___________________________________
 
-def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False,compute_2nd_ders=False):
-
+def compute_fast_Cls(dndz_z_curr,mat_cC,ell=ells,compute_ders=False,compute_2nd_ders=False,compute_cov=False,plot_for_sanity=False):
     # After obtaining the mCs we can now do simple linalg to get the Cls
 
+
+    # check if it is the correct shape
+    if dndz_z_curr.shape[0] != N_tomo: dndz_z_curr = dndz_z_curr.reshape(N_tomo,N_zsamples_theo)
+    
     # correlation number for all types gg gs ss and all combinations of redshift
     # THIS N_TOMO IS NOW THE FULL NUMBER OF TOMOGRAPHIC BINS
     tot_corr = N_ell*(N_tomo*(2*N_tomo+1))
@@ -730,16 +757,151 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False,compute_2nd_ders=Fals
         # This is the usual, proven way of recording the Cls
         Cl_fast_all[(N_ell*c):(N_ell*c)+N_ell] = CL
 
-    if (compute_ders == False and compute_2nd_ders == False):
+    if (compute_ders == False and compute_2nd_ders == False and compute_cov == False):
         return Cl_fast_all
-    elif (compute_ders == True and compute_2nd_ders == False):
-        return dCl_fast_all
-    elif (compute_ders == False and compute_2nd_ders == True):
-        return ddCl_fast_all
-    else:
-        return dCl_fast_all, ddCl_fast_all
+    elif (compute_ders == True and compute_2nd_ders == False and compute_cov == False):
+        return Cl_fast_all, dCl_fast_all
+    elif (compute_ders == False and compute_2nd_ders == True and compute_cov == False):
+        return Cl_fast_all, ddCl_fast_all
+    elif (compute_cov == False):
+        return Cl_fast_all, Cl_fast_all, ddCl_fast_all
 
-# NUMERICAL DERIVATIVE
+    print(len(Cl_fast_all))
+    
+    Cov_fast_all = np.zeros((len(Cl_fast_all),len(Cl_fast_all)))    
+    # COMPUTE COVARIANCE MATRIX 
+    for c_A, comb_A in enumerate(all_combos):
+        for c_B, comb_B in enumerate(all_combos):
+            i = comb_A[0]%N_tomo # first redshift bin
+            j = comb_A[1]%N_tomo # second redshift bin
+            m = comb_B[0]%N_tomo # first redshift bin
+            n = comb_B[1]%N_tomo # second redshift bin                        
+            
+            c_im = np.argmax(np.product(np.sort(np.array([comb_A[0],comb_B[0]]))==all_combos,axis=1))
+            c_jn = np.argmax(np.product(np.sort(np.array([comb_A[1],comb_B[1]]))==all_combos,axis=1))
+            c_in = np.argmax(np.product(np.sort(np.array([comb_A[0],comb_B[1]]))==all_combos,axis=1))
+            c_jm = np.argmax(np.product(np.sort(np.array([comb_A[1],comb_B[0]]))==all_combos,axis=1))
+
+            # PAIRS A,B ARE (ti,tj),(tm,tn) at same ell
+            #cov(ij,mn) = im,jn + in,jm                    
+            C_im = Cl_fast_all[(c_im*N_ell):(c_im*N_ell)+N_ell]
+            C_jn = Cl_fast_all[(c_jn*N_ell):(c_jn*N_ell)+N_ell]
+            C_in = Cl_fast_all[(c_in*N_ell):(c_in*N_ell)+N_ell]
+            C_jm = Cl_fast_all[(c_jm*N_ell):(c_jm*N_ell)+N_ell]
+
+            
+           # Knox formula
+            Cov_ijmn = (C_im*C_jn+C_in*C_jm)/((2*ell+1.)*delta_ell*f_sky)
+            
+            if plot_for_sanity == True:
+                if (c_A == c_B):
+                    print(i,j,'=',m,n)
+                    print(c_A)
+                    Cl_err = np.sqrt(Cov_ijmn)
+
+                    t_i = comb_A[0]//N_tomo
+                    t_j = comb_A[1]//N_tomo
+                    print(N_tomo*i+j+1)
+                    
+                    plt.subplot(N_tomo, N_tomo, N_tomo*i+j+1)
+                    plt.title("z=%f x z=%f"%(z_bin_cents[i],z_bin_cents[j]))
+                    c_ij = np.argmax(np.product(np.sort(np.array([comb_A[0],comb_A[1]]))==all_combos,axis=1))
+                    C_ij = Cl_fast_all[(c_ij*N_ell):(c_ij*N_ell)+N_ell]
+                    # maybe add legend
+                    (_,caps,eb)=plt.errorbar(ell,C_ij,yerr=Cl_err,lw=2.,ls='-',capsize=5,label=str(t_i*2+t_j)) 
+                    plt.legend()
+                    plt.xscale('log')
+                    plt.yscale('log')
+
+
+
+            Cov_fast_all[(N_ell*c_A):(N_ell*c_A)+\
+                    N_ell,(N_ell*c_B):(N_ell*c_B)+N_ell] = np.diag(Cov_ijmn)
+            Cov_fast_all[(N_ell*c_B):(N_ell*c_B)+\
+                    N_ell,(N_ell*c_A):(N_ell*c_A)+N_ell] = np.diag(Cov_ijmn)
+
+
+            
+
+    evals,evecs = la.eig(Cov_fast_all)
+    
+    if (is_pos_def(Cov_fast_all) != True): print("Covariance is not positive definite!"); exit(0)
+
+    if (compute_ders == False and compute_2nd_ders == False):
+        return Cl_fast_all, Cov_fast_all
+    elif (compute_ders == True and compute_2nd_ders == False):
+        return Cl_fast_all, dCl_fast_all, Cov_fast_all
+    elif (compute_ders == False and compute_2nd_ders == True):
+        return Cl_fast_all, ddCl_fast_all, Cov_fast_all
+    else:
+        return Cl_fast_all, Cl_fast_all, ddCl_fast_all, Cov_fast_all
+    
+
+
+# Load the curly C
+mat_C = np.load("mat_C.npy")
+
+# ____________________________________________
+#                 INITIAL GUESS
+# ____________________________________________
+
+x0 = np.zeros(N_tomo*(N_zsamples_theo-1))
+full_x0 = np.zeros(N_tomo*N_zsamples_theo)
+chi2_s = np.zeros(N_tomo)
+for i in range(N_tomo):
+    if False:
+        x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_data_theo[i,:-1]#+0.01 # TESTING
+        continue
+    dndz_this = gaussian(z_s_cents_theo,z_bin_cents[i],0.2)
+    dndz_this /= np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_this[:-1]
+    chi2_s[i] = (np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))-1)
+
+for i in range(N_tomo):
+    full_x0[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)-1] = x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]
+    sum_dndz = np.sum(x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    full_x0[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)/(z_edges_theo[1]-z_edges_theo[0])
+
+print(full_x0)
+print(np.sum(chi2_s)); # starting with 0 for no noise and 1000 for noise
+
+
+# ____________________________________________
+#                 NEWTON-RAPHSON
+# ____________________________________________
+
+x = full_x0.copy()
+
+print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-x)**2))
+
+
+# compute the Cls and their derivatives
+Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(x,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
+N_elm = len(Cl_fast)
+Cl_fast = Cl_fast.reshape(N_elm,1)
+
+iCov_fast = la.inv(Cov_fast)
+
+A = np.zeros((N_tomo*N_zsamples_theo,N_tomo*N_zsamples_theo))
+v = np.zeros(N_tomo*N_zsamples_theo)
+for i in range(N_tomo*N_zsamples_theo):
+    Delta_Cl = Cl_true-Cl_fast
+    dCl_i = dCldp_fast[i,:].reshape(N_elm,1)
+    v[i] = np.dot(dCl_i.T,np.dot(iCov_fast,Delta_Cl))[0][0]
+    for j in range(N_tomo*N_zsamples_theo):
+
+        dCl_j = dCldp_fast[j,:].reshape(N_elm,1)
+        A[i,j] = np.dot(dCl_i.T,np.dot(iCov_fast,dCl_j))[0][0] + D[i,j] # TESTING
+
+v.reshape(N_tomo*N_zsamples_theo,1)
+iA = la.inv(A)
+x += -np.dot(iA,v)
+
+print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-x)**2))
+
+quit()
+
+# NUMERICAL DERIVATIVES
 def compute_num_derivs(ind_j,dval):
     dndz_z = dndz_data_theo.copy()
     k = ind_j % N_zsamples_theo # gives sample
