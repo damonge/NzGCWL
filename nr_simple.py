@@ -870,13 +870,19 @@ print(np.sum(chi2_s)); # starting with 0 for no noise and 1000 for noise
 #                 NEWTON-RAPHSON
 # ____________________________________________
 
-x = full_x0.copy()
+full_x = np.zeros(N_tomo*N_zsamples_theo)
+x = x0.copy()
+for i in range(N_tomo):
+    full_x[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)-1] = x[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]
+    sum_dndz = np.sum(x[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    full_x[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)/(z_edges_theo[1]-z_edges_theo[0])
 
-print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-x)**2))
+print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-full_x)**2))
 
+# FIX NOT SURE
 
 # compute the Cls and their derivatives
-Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(x,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
+Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(full_x,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
 N_elm = len(Cl_fast)
 Cl_fast = Cl_fast.reshape(N_elm,1)
 
@@ -887,7 +893,8 @@ v = np.zeros(N_tomo*N_zsamples_theo)
 for i in range(N_tomo*N_zsamples_theo):
     Delta_Cl = Cl_true-Cl_fast
     dCl_i = dCldp_fast[i,:].reshape(N_elm,1)
-    v[i] = np.dot(dCl_i.T,np.dot(iCov_fast,Delta_Cl))[0][0]
+    print(np.dot(D[i,:],full_x.reshape(N_tomo*N_zsamples_theo,1))[0])
+    v[i] = np.dot(dCl_i.T,np.dot(iCov_fast,Delta_Cl))[0][0]+np.dot(D[i,:],full_x.reshape(N_tomo*N_zsamples_theo,1))[0]
     for j in range(N_tomo*N_zsamples_theo):
 
         dCl_j = dCldp_fast[j,:].reshape(N_elm,1)
@@ -895,9 +902,9 @@ for i in range(N_tomo*N_zsamples_theo):
 
 v.reshape(N_tomo*N_zsamples_theo,1)
 iA = la.inv(A)
-x += -np.dot(iA,v)
+full_x += -np.dot(iA,v)
 
-print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-x)**2))
+print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-full_x)**2))
 
 quit()
 
