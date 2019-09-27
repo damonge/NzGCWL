@@ -497,28 +497,38 @@ Cl_true = compute_Cls(params)
 # _______________________________________________
 
 dndz_dval = 0.02
-sigma1 = 0.01
-sigma2 = 0.01
+sigma0 = 0.000001
+sigma1 = 0.2
+sigma2 = 0.2
 D1 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
+D0 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
 
+lam0 = np.zeros(N_zsamples_theo*N_tomo)
 lam = np.zeros(N_zsamples_theo*N_tomo)
 for j in range(N_zsamples_theo*N_tomo):
     i_tomo = j//N_zsamples_theo
     i_zsam = j%N_zsamples_theo
     lam *= 0
+    lam0 *= 0
+    lam0[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo]=1.
+
     if (i_zsam+1<N_zsamples_theo):
         ip1 = j+1
         lam[ip1] = -1./dndz_dval 
     if (i_zsam-1>=0):
         im1 = j-1
-        lam[im1] = 1./dndz_dval 
-    tmp = lam.reshape(N_zsamples_theo*N_tomo,1)
+        lam[im1] = 1./dndz_dval
+    tmp0 = lam0.reshape(N_zsamples_theo*N_tomo,1)
+    tmp = lam.reshape(N_zsamples_theo*N_tomo,1)    
+
+    D0 += np.dot(tmp0,tmp0.T)
     D1 += np.dot(tmp,tmp.T)
 
+D0 /= sigma0**2.
 D1 /= sigma1**2.
-print(D1)
 
-D = D1
+
+D = D1#+D0
 
 
 # ___________________________________
@@ -847,24 +857,20 @@ mat_C = np.load("mat_C.npy")
 
 x0 = np.zeros(N_tomo*(N_zsamples_theo-1))
 full_x0 = np.zeros(N_tomo*N_zsamples_theo)
-chi2_s = np.zeros(N_tomo)
+
 for i in range(N_tomo):
-    if False:
+    if True:
         x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_data_theo[i,:-1]#+0.01 # TESTING
         continue
     dndz_this = gaussian(z_s_cents_theo,z_bin_cents[i],0.2)
-    dndz_this /= np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    dndz_this /= np.sum(dndz_this)#*(z_s_edges_theo[1]-z_s_edges_theo[0]))
     x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_this[:-1]
-    chi2_s[i] = (np.sum(dndz_this*(z_s_edges_theo[1]-z_s_edges_theo[0]))-1)
+    
 
 for i in range(N_tomo):
     full_x0[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)-1] = x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]
-    sum_dndz = np.sum(x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]*(z_s_edges_theo[1]-z_s_edges_theo[0]))
-    full_x0[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)/(z_edges_theo[1]-z_edges_theo[0])
-
-print(full_x0)
-print(np.sum(chi2_s)); # starting with 0 for no noise and 1000 for noise
-
+    sum_dndz = np.sum(x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)])#*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    full_x0[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)#/(z_s_edges_theo[1]-z_s_edges_theo[0])
 
 # ____________________________________________
 #                 NEWTON-RAPHSON
@@ -874,8 +880,8 @@ full_x = np.zeros(N_tomo*N_zsamples_theo)
 x = x0.copy()
 for i in range(N_tomo):
     full_x[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)-1] = x[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]
-    sum_dndz = np.sum(x[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)]*(z_s_edges_theo[1]-z_s_edges_theo[0]))
-    full_x[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)/(z_edges_theo[1]-z_edges_theo[0])
+    sum_dndz = np.sum(x[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)])#*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    full_x[(i+1)*(N_zsamples_theo)-1] = (1-sum_dndz)#/(z_edges_theo[1]-z_edges_theo[0])
 
 print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-full_x)**2))
 
@@ -885,28 +891,46 @@ print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-full_x)**2))
 Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(full_x,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
 N_elm = len(Cl_fast)
 Cl_fast = Cl_fast.reshape(N_elm,1)
+Cl_true = Cl_true.reshape(N_elm,1)
 
 iCov_fast = la.inv(Cov_fast)
 
-A = np.zeros((N_tomo*N_zsamples_theo,N_tomo*N_zsamples_theo))
-v = np.zeros(N_tomo*N_zsamples_theo)
-for i in range(N_tomo*N_zsamples_theo):
-    Delta_Cl = Cl_true-Cl_fast
-    dCl_i = dCldp_fast[i,:].reshape(N_elm,1)
-    print(np.dot(D[i,:],full_x.reshape(N_tomo*N_zsamples_theo,1))[0])
-    v[i] = np.dot(dCl_i.T,np.dot(iCov_fast,Delta_Cl))[0][0]+np.dot(D[i,:],full_x.reshape(N_tomo*N_zsamples_theo,1))[0]
-    for j in range(N_tomo*N_zsamples_theo):
 
-        dCl_j = dCldp_fast[j,:].reshape(N_elm,1)
-        A[i,j] = np.dot(dCl_i.T,np.dot(iCov_fast,dCl_j))[0][0] + D[i,j] # TESTING
+Delta_Cl = Cl_true-Cl_fast
 
-v.reshape(N_tomo*N_zsamples_theo,1)
+A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T))
+V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl))
+
+chi2 = np.dot(Delta_Cl.T,np.dot(iCov_fast,Delta_Cl))#[0][0]
+print(chi2)
+
 iA = la.inv(A)
-full_x += -np.dot(iA,v)
+full_x += np.dot(iA,V).flatten()#-np.dot(iA,V).flatten()
 
 print("Delta_dndz = ",np.sum((dndz_data_theo.flatten()-full_x)**2))
 
+for i in range(N_tomo):
+    sum_dndz = np.sum(full_x[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)])#*(z_s_edges_theo[1]-z_s_edges_theo[0]))
+    full_x[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)] /= sum_dndz
+    sum_dndz = np.sum(full_x[i*(N_zsamples_theo):(i+1)*(N_zsamples_theo)])
+    print(sum_dndz)
+
+sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0]))
+
+Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(full_x,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
+N_elm = len(Cl_fast)
+Cl_fast = Cl_fast.reshape(N_elm,1)
+
+iCov_fast = la.inv(Cov_fast)
+Delta_Cl = Cl_true-Cl_fast
+chi2 = np.dot(Delta_Cl.T,np.dot(iCov_fast,Delta_Cl))#[0][0]
+print(chi2)
 quit()
+# Matches
+
+print("A = ",A[:5,:5])
+print("F = ",fisher[:5,:5])
+print("A-F = ",np.mean(A-fisher))
 
 # NUMERICAL DERIVATIVES
 def compute_num_derivs(ind_j,dval):
