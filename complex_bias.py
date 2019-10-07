@@ -270,13 +270,14 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
 
     # load the bias parameters
     # k # indicates which of N_tomo sampling bins
-    b_z = np.array([par['b_%02d'%k]['val'] for k in range(N_zsamples)])
+    
     
     # load the dndz parameters
     dndz_z = np.zeros((N_tomo,N_zsamples))
+    b_z = np.zeros((N_tomo,N_zsamples))
     for i_z in range(N_tomo):
         dndz_z[i_z,:] = np.array([par['dndz_%02d_%02d'%(i_z,k)]['val'] for k in range(N_zsamples)])
-    
+        b_z[i_z,:] = np.array([par['b_%02d_%02d'%(i_z,k)]['val'] for k in range(N_zsamples)])
 
     # per type gg gs ss
     tot_corr = N_ell*(N_tomo*(2*N_tomo+1))
@@ -309,11 +310,11 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
             noise_shape = 0.
         
         # Now create corresponding Cls with pk2D objects matched to pk
-        if t_i*2+t_j == 0: # this is gg
-            tracer_z1 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
+        if t_i*2+t_j == 0: # this is gg 
+            tracer_z1 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z[i,:]), \
                                                dndz=(z_cent, dndz_z[i,:]),mag_bias=None, \
                                                has_rsd=False)
-            tracer_z2 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
+            tracer_z2 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z[j,:]), \
                                                dndz=(z_cent, dndz_z[j,:]),mag_bias=None, \
                                                has_rsd=False)
 
@@ -322,8 +323,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
 
             CL_ALL[(N_ell*c):(N_ell*c)+N_ell] = cl_gg_no
         elif t_i*2+t_j == 1: # this is gs
-            
-            tracer_z1 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z), \
+            tracer_z1 = ccl.NumberCountsTracer(cosmo_fid, bias=(z_cent, b_z[i,:]), \
                                                dndz=(z_cent, dndz_z[i,:]),mag_bias=None, \
                                                has_rsd=False)
             tracer_z2 = ccl.WeakLensingTracer(cosmo_fid, dndz=(z_cent, dndz_z[j,:]))
@@ -463,31 +463,36 @@ b_zsamples_theo = 0.95/ccl.growth_factor(cosmo_fid,a_s_cents_theo)
 
 # create the matrix
 bz_data_theo = np.repeat(b_zsamples_theo.reshape(1,N_zsamples_theo),N_tomo,axis=0)
+bz_data = np.zeros((N_tomo,N_zsamples))
 
+for i in range(N_tomo):
+    bz_data_theo[i,:] += .2*np.random.randn(N_zsamples_theo)
+    # interpolating to nearest to pass to code
+    if interp == 'nearest':
+        f = interp1d(np.append(z_s_cents_theo,np.array([z_s_cents[0],z_s_cents[-1]])),np.append(bz_data_theo[i,:],np.array([bz_data_theo[i,0],bz_data_theo[i,-1]])),kind='nearest',bounds_error=0,fill_value=0.)
+    else:
+        print("STICK TO NEAREST FOR NOW"); exit(0)
+
+    b_zsamples = f(z_s_cents)
+    bz_data[i,:] = b_zsamples
+    plt.plot(z_s_cents,b_zsamples)
+    plt.plot(z_s_cents_theo,bz_data_theo[i,:])
+plt.savefig('biases.png')
+plt.close()
+    
 # matrices used for the fast calculation
 b_mat = np.repeat(b_zsamples_theo.reshape(N_zsamples_theo,1),N_zsamples_theo,axis=1)
 b2_mat = b_mat.T*b_mat # yes this is what i need
 nob_mat = np.ones((N_zsamples_theo,N_zsamples_theo))
 
 # when num differentiating
+dndz_dval = 0.02
 bz_dval = 0.02
-
-# interpolating to nearest to pass to code
-if interp == 'nearest':
-    f = interp1d(np.append(z_s_cents_theo,np.array([z_s_cents[0],z_s_cents[-1]])),np.append(b_zsamples_theo,np.array([b_zsamples_theo[0],b_zsamples_theo[-1]])),kind='nearest',bounds_error=0,fill_value=0.)
-else:
-    print("STICK TO NEAREST FOR NOW")
-
-b_zsamples = f(z_s_cents)
-plt.plot(z_s_cents,b_zsamples)
-plt.plot(z_s_cents_theo,b_zsamples_theo)
-plt.savefig('biases.png')
-plt.close()
 
 for i in np.arange(N_tomo):
     for k in np.arange(N_zsamples):
-        params['b_%02d'%k]  = {'val':b_zsamples[k]  ,'dval':0.02 ,'label':'$b_%02d$'%k ,'isfree':False}
-        params['dndz_%02d_%02d'%(i,k)]  = {'val':dndz_data[i,k] ,'dval':0.1 ,'label':'dndz_%02d_%02d'%(i,k),'isfree':False}
+        params['b_%02d_%02d'%(i,k)]  = {'val':bz_data[i,k]  ,'dval':0.02 ,'label':'$b_%02d_%02d$'%(i,k) ,'isfree':False}
+        params['dndz_%02d_%02d'%(i,k)]  = {'val':dndz_data[i,k] ,'dval':0.02 ,'label':'dndz_%02d_%02d'%(i,k),'isfree':False}
 
 Cl_true = compute_Cls(params)
 # add noise
@@ -915,29 +920,30 @@ mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
 # NUMERICAL DERIVATIVES
 def compute_num_derivs(ind_j,dval):
     dndz_z = dndz_data_theo.copy()
+    b_z = bz_z.copy()
     k = ind_j % N_zsamples_theo # gives sample
     i = ind_j // N_zsamples_theo # gives tomo
 
     print('tomo_i, zsam_k = ',i,k)
     dndz_ik = dndz_z[i,k]
     dndz_z[i,k] = dndz_ik+dval
-    clp = compute_fast_Cls(dndz_z,mat_C)
+    clp = compute_fast_Cls(dndz_z,mat_C,b_z)
     dndz_z[i,k] = dndz_ik-dval
-    clm = compute_fast_Cls(dndz_z,mat_C)
+    clm = compute_fast_Cls(dndz_z,mat_C,b_z)
     return (clp-clm)/(2*dval)
 
 def compute_num_derivs_bz(ind_j,dval):
     dndz_z = dndz_data_theo.copy()
-    bz_z = bz_data_theo.copy()
+    b_z = bz_z.copy()
     k = ind_j % N_zsamples_theo # gives sample
     i = ind_j // N_zsamples_theo # gives tomo
 
     print('tomo_i, zsam_k = ',i,k)
-    bz_ik = bz_z[i,k]
-    bz_z[i,k] = bz_ik+dval
-    clp = compute_fast_Cls(dndz_z,mat_C,bz_z)
-    bz_z[i,k] = bz_ik-dval
-    clm = compute_fast_Cls(dndz_z,mat_C,bz_z)
+    bz_ik = b_z[i,k]
+    b_z[i,k] = bz_ik+dval
+    clp = compute_fast_Cls(dndz_z,mat_C,b_z)
+    b_z[i,k] = bz_ik-dval
+    clm = compute_fast_Cls(dndz_z,mat_C,b_z)
     return (clp-clm)/(2*dval)
 
 def compute_num_2nd_derivs(ind_j1,ind_j2,dval):
@@ -967,7 +973,6 @@ def compute_num_2nd_derivs(ind_j1,ind_j2,dval):
     return ((clp1p2-clp1m2)-(clm1p2-clm1m2))/(4.*dval**2)
 
 mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
-dndz_dval = 0.02
 temp = np.arange(2*N_tomo)
 temp = np.vstack((temp,temp)).T
 combs = np.array(list(combinations(range(2*N_tomo),2)))
@@ -976,11 +981,10 @@ all_combos = np.vstack((temp,combs))
 dndz_z = dndz_data_theo.copy()
 bz_z = bz_data_theo.copy()
 
-# TESTING
-#Cl_fast = compute_fast_Cls(dndz_z,mat_C)
+# Computing the Cls
 Cl_fast = compute_fast_Cls(dndz_z,mat_C,bz_z)
 
-# PLOTTING TESTING
+# PLOTTING 
 fig = plt.figure(figsize=(30,25))
 for c, comb in enumerate(all_combos):
     i_tomo = comb[0]%N_tomo # first redshift bin
@@ -1010,7 +1014,7 @@ plt.savefig("Cl_all.pdf")
 
 complex_bz = True
 if complex_bz == False:
-    Cl_fast, dCldp_fast_alpha = compute_fast_Cls(dndz_z,mat_C,compute_ders=True)
+    Cl_fast, dCldp_fast_alpha = compute_fast_Cls(dndz_z,mat_C,b_z,compute_ders=True)
     dCldp_num_alpha = np.zeros((N_tomo*N_zsamples_theo,int(N_tomo*(2*N_tomo+1)*N_ell)))
 else:
     Cl_fast, dCldp_fast_alpha = compute_fast_Cls(dndz_z,mat_C,bz_z,compute_ders=True)
