@@ -160,11 +160,6 @@ for i in range(N_tomo):
                                             zp_ini=z_bin_ini, zp_end=z_bin_end, # Bin edges
                                             zt_edges=(z_ini_sample, z_end_sample),          # Sampling range
                                             zt_nbins=N_zsamples_theo)         # Number of samples
-
-    ## a single triangle
-    #dndz_this*=0
-    #dndz_this[i]=1.0
-    #dndz_this[1]=1.0
     
     # area under the curve (must be 1)
     sum_dndz = np.sum(dndz_this*(z_edges_theo[1]-z_edges_theo[0])) # equals 1
@@ -172,7 +167,6 @@ for i in range(N_tomo):
     # Important second line of normalization
     #dndz_this/=sum_dndz # DOESN'T MATTER AS SUM_DNDZ = 1
     dndz_this*=(z_edges_theo[1]-z_edges_theo[0]) # VERY VERY VERY IMPORTANT
-
     
     # this is what values will be interpolated
     # (here because I have other codes where I use lorentzian, avg, etc)
@@ -181,10 +175,9 @@ for i in range(N_tomo):
     # interpolating from N_zsamples_theo points
     if interp == 'spline': # NOT USED IN THIS CODE
         # EXTRAPOLATION OUTSIDE RANGE -- DAVID SAYS NOT DONE FOR PYCCL
-        #f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(dndz_theo_fn,np.array([dndz_this[0],dndz_this[-1]])),kind='cubic',fill_value='extrapolate')
+        f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(dndz_theo_fn,np.array([dndz_this[0],dndz_this[-1]])),kind='cubic',fill_value=0)#'extrapolate')
         # NO EXTRAPOLATION
-        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='cubic',bounds_error=0,fill_value=0.)
-        f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='cubic',bounds_error=0,fill_value=(dndz_theo_fn[0],dndz_theo_fn[-1]))
+        #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='cubic',bounds_error=0,fill_value=0.)#(dndz_theo_fn[0],dndz_theo_fn[-1]))
     elif interp == 'log': # NOT USED IN THIS CODE
         f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(np.log10(dndz_theo_fn),np.log10(np.array([dndz_this[0],dndz_this[-1]]))),kind='cubic',fill_value='extrapolate')  
     elif interp == 'nearest':
@@ -859,7 +852,7 @@ x0 = np.zeros(N_tomo*(N_zsamples_theo-1))
 full_x0 = np.zeros(N_tomo*N_zsamples_theo)
 
 for i in range(N_tomo):
-    if True:
+    if False:#True:
         x0[i*(N_zsamples_theo-1):(i+1)*(N_zsamples_theo-1)] = dndz_data_theo[i,:-1]#+0.01 # TESTING
         continue
     dndz_this = gaussian(z_s_cents_theo,z_bin_cents[i],0.2)

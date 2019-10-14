@@ -32,6 +32,7 @@ direc = '/users/boryanah/HSC/figs/'
 tomo = sys.argv[1]
 zsam = sys.argv[2]
 steps = int(sys.argv[3])
+functional = int(sys.argv[4])
 # ___________________________________
 #             PARAMETERS
 # ___________________________________
@@ -124,6 +125,9 @@ def is_pos_def(x):
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
+def lorentz(x, A, mu, sig):
+    return A/(1+(np.abs(x-mu)/(0.5*sig))**2.7)
+
 def get_nz_from_photoz_bins(zp_code,zp_ini,zp_end,zt_edges,zt_nbins):
     # Select galaxies in photo-z bin
     sel=(cat[zp_code]<=zp_end) & (cat[zp_code]>zp_ini)
@@ -139,8 +143,11 @@ def get_nz_from_photoz_bins(zp_code,zp_ini,zp_end,zt_edges,zt_nbins):
                            density=True)
 
     zs=cat['PHOTOZ'][sel]                                                                          
-    we=cat['weight'][sel] 
-    return nz, z_bins, ngal
+    we=cat['weight'][sel]
+
+    mean = (zs*we).sum()/we.sum()
+    sigma = np.sqrt((zs**2*we).sum()/we.sum()-mean**2) 
+    return nz, z_bins, ngal, mean, sigma
 
 # initiating all
 dndz_data = np.zeros((N_tomo,N_zsamples))
@@ -157,7 +164,7 @@ for i in range(N_tomo):
     z_bin_mid = 0.5*(z_bin_ini+z_bin_end)        
 
    
-    dndz_this, z_edges_theo, N_gal_this = \
+    dndz_this, z_edges_theo, N_gal_this, mean, sigma = \
                     get_nz_from_photoz_bins(zp_code='pz_best_eab',# Photo-z code
                                             zp_ini=z_bin_ini, zp_end=z_bin_end, # Bin edges
                                             zt_edges=(z_ini_sample, z_end_sample),          # Sampling range
@@ -188,16 +195,22 @@ for i in range(N_tomo):
     elif interp == 'linear':
         #f = interp1d(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),dndz_theo_fn,kind='linear',bounds_error=0,fill_value=0.)
         f = interp1d(np.append(0.5*(z_edges_theo[:-1]+z_edges_theo[1:]),np.array([z_s_cents[0],z_s_cents[-1]])),np.append(dndz_theo_fn,np.array([dndz_theo_fn[0],dndz_theo_fn[-1]])),kind='linear',bounds_error=0,fill_value=0.)
-        
+
+    # record discrete dndzs
+    dndz_data_theo[i,:] = dndz_this
+    
     if interp == 'log': dndz_data[i,:] = 10**f(z_s_cents)
+    elif functional == 1:
+        dndz_data_theo[i,:] = lorentz(z_s_cents_theo,np.max(dndz_this),mean,sigma)
+        sum_dndz_theo = np.sum(dndz_data_theo[i,:])# equals 1
+        dndz_data_theo[i,:] /= sum_dndz_theo
+        # norm does not matter too much but just for direct checks with answer
+        dndz_data[i,:] = lorentz(z_s_cents,np.max(dndz_this),mean,sigma)
     else: dndz_data[i,:] = f(z_s_cents)
 
     # Normalization not necessary
     #sum_dndz = np.sum(dndz_data[i,:]*(z_s_cents[1]-z_s_cents[0])) # equals 1
     #dndz_data[i,:] = dndz_data[i,:]/sum_dndz # DOESN'T MATTER SINCE PYCCL NORMALIZES
-    
-    # record discrete dndzs
-    dndz_data_theo[i,:] = dndz_this
 
     # Record number of galaxies
     N_gal_bin[i] = N_gal_this
@@ -627,7 +640,7 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
 # =====================================================
 #       SUMMON curly C (comment out for fastness)
 # =====================================================
-
+'''
 # generate the shapes
 N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
 z_many = z_s_cents
@@ -670,7 +683,7 @@ for i in range(N_zsamples_theo):
         
 # Save curly C matrix
 np.save("mat_C_"+str(tomo)+"_"+str(zsam)+".npy",mat_C)
-
+'''
 # ___________________________________
 #  LOADING CURLY C AND ADDING NOISE
 # ___________________________________
@@ -843,7 +856,7 @@ mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
 
 
 # Might wanna use the other Cl_true which does not use the approximation
-Cl_true, dCldp_true, Cov_true = compute_fast_Cls(dndz_data_theo,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
+cl_true, dCldp_true, Cov_true = compute_fast_Cls(dndz_data_theo,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
 iCov_true = la.inv(Cov_true)
 
 # In case you ever need fisher
@@ -880,9 +893,9 @@ for s in range(steps):
     # extra regularization term
     # TESTING
     n_diff = (full_x).reshape(N_zsamples_theo*N_tomo,1)
-    Reg_V = np.dot(D,n_diff)-1./N_tomo#testing
+    Reg_V = np.dot(D,n_diff)-1./N_tomo
     Reg_A = D
-    reg = 1.e14
+    reg = 0#1.e14
     
     print("sum_dndz = ",np.sum(full_x))
     print("chi2_reg = ",np.dot(full_x.T,np.dot(Reg_A,full_x))-2*np.sum(full_x)/N_tomo+1)

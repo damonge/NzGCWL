@@ -761,7 +761,7 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                 bj = b_z_curr[j_tomo,:].reshape(N_zsamples_theo,1)
                 bi_f = np.ones_like(bi); bj_f = np.ones_like(bj);
                 ni_f = np.ones_like(bi); nj_f = np.ones_like(bj);
-                ddi = ni*bi; ddj = nj*bj; dni = bi; dbi = ni; dnj = bj; dbj = nj
+                
                 di = ni*bi; dj = nj*bj
                 
         if t_i*2+t_j == 1: # this is gs
@@ -774,7 +774,7 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                 bj = np.ones((N_zsamples_theo,1))
                 bi_f = np.ones_like(bi); bj_f = np.zeros_like(bj);
                 ni_f = np.ones_like(bi); nj_f = np.ones_like(bj);
-                ddi = ni; ddj = nj; dni = bi; dbi = ni; dnj = bj; dbj = nj
+                
                 di = ni*bi; dj = nj
             
                 
@@ -788,7 +788,7 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                 bj = np.ones((N_zsamples_theo,1))
                 bi_f = np.zeros_like(bi); bj_f = np.zeros_like(bj);
                 ni_f = np.ones_like(bi); nj_f = np.ones_like(bj);
-                ddi = ni; ddj = nj; dbi = 0*ni; dni = np.ones_like(bi); dnj = np.ones_like(bj); dbj = 0*nj
+                
                 di = ni; dj = nj
                 
         for k in range(N_ell):
@@ -819,10 +819,10 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                     
             if (compute_2nd_ders == True): # NOT WORKING PERFECTLY
                 if (i_tomo == j_tomo):
-                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k+matC_k.T
+                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k*2.
                 else:
                     ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k
-                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k#.T
+                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k
         # Finally add noise depending on type of correlation
         CL += noise
         # This is the usual, proven way of recording the Cls

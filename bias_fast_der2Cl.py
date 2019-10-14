@@ -1,3 +1,4 @@
+# I believe that we do not have the numerical derivatives that I projected we do because we only differentiate wrt to the tomographic bin
 # FOR NOW WORKS ONLY WITH NEAREST
 import matplotlib
 matplotlib.use('Agg')
@@ -643,7 +644,7 @@ for i in range(N_zsamples_theo):
         # In the function the dndz parameters are updated to the D_i_many guys
         Cl_many = compute_mCs(params,i_zs=i,j_zs=j)
         print(Cl_many.sum())
-        # record matrix entries for this choise of zsample bins i and j
+        # record matrix entries for this choice of zsample bins i and j
         mat_C[i,j,:] = Cl_many 
         
 # Save curly C matrix
@@ -719,12 +720,12 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,compute_ders=False,compute_2nd_ders=Fals
                 else:
                     dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(matC_k,dj)).T
                     dCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (np.dot(di,matC_k))
-            if (compute_2nd_ders == True):
+            if (compute_2nd_ders == True): # I THINK THAT THERE IS AN ISSUE REGARDING AN ASSUMED SYMMETRY WHEN DOING THE DERIVATIVES
                 if (i_tomo == j_tomo):
-                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k+matC_k.T
+                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k*2.
                 else:
-                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = .5*(matC_k+matC_k.T)
-                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = .5*(matC_k+matC_k.T)#matC_k#.T
+                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (matC_k)
+                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (matC_k)
         # Finally add noise depending on type of correlation
         CL += noise
         # This is the usual, proven way of recording the Cls
@@ -891,15 +892,22 @@ for N_plot1 in range(N_tomo*N_zsamples_theo):
             if (t_i*2+t_j == 0): int_t='gg'; c='red'
             if (t_i*2+t_j == 1): int_t='gs'; c='purple'
             if (t_i*2+t_j == 3): int_t='ss'; c='blue'
-            
-            if tomo1 == tomo2: print("tomo1=2 = "+str(tomo1)+", zsamp1,zsamp2",zsamp1,zsamp2,", type = ",int_t)
-            
-            else: print("tomo1,2 = ",tomo1,tomo2,"zsamp1,zsamp2",zsamp1,zsamp2,", type = ",int_t)
+
+            mean_t = np.mean(ddCt)
+            mean_f = np.mean(ddCf)
+            if mean_t < 1.e-20: mean_t = 0.
             #if tomo1 == tomo2:
-            print("diff = ",np.mean(1-ddCf/ddCt))
-            print("ddCf = ",np.mean(ddCf))
-            print("ddCt = ",np.mean(ddCt))
-            print("--------------")
+            diff = np.mean(1-ddCf/ddCt)
+            if diff > 1.e-3 and mean_f+mean_t > 1.e-20:# and zsamp1==zsamp2: # MIGHT BE WRONG
+                print("partial C_i"+str(i_tomo)+" j"+str(j_tomo))
+                if i_tomo == tomo1 and j_tomo == tomo2: print("C_ij wrt ij")
+                if i_tomo == tomo2 and j_tomo == tomo1: print("C_ij wrt ji")
+                if tomo1 == tomo2: print("partial tomo1=2 = "+str(tomo1)+", zsamp1,zsamp2",zsamp1,zsamp2,", type = ",int_t)
+                else: print("partial tomo1,2 = ",tomo1,tomo2,"zsamp1,zsamp2",zsamp1,zsamp2,", type = ",int_t)
+                print("diff = ",diff)
+                print("ddCf = ",mean_f)
+                print("ddCt = ",mean_t)
+                print("--------------")
 quit()
 #MORE PLOTS
 

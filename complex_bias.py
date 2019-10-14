@@ -761,7 +761,8 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                 bj = b_z_curr[j_tomo,:].reshape(N_zsamples_theo,1)
                 bi_f = np.ones_like(bi); bj_f = np.ones_like(bj);
                 ni_f = np.ones_like(bi); nj_f = np.ones_like(bj);
-                ddi = ni*bi; ddj = nj*bj; dni = bi; dbi = ni; dnj = bj; dbj = nj
+
+                # used for Cl computation and no complex bias
                 di = ni*bi; dj = nj*bj
                 
         if t_i*2+t_j == 1: # this is gs
@@ -774,7 +775,8 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                 bj = np.ones((N_zsamples_theo,1))
                 bi_f = np.ones_like(bi); bj_f = np.zeros_like(bj);
                 ni_f = np.ones_like(bi); nj_f = np.ones_like(bj);
-                ddi = ni; ddj = nj; dni = bi; dbi = ni; dnj = bj; dbj = nj
+
+                # used for Cl computation and no complex bias
                 di = ni*bi; dj = nj
             
                 
@@ -788,11 +790,12 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                 bj = np.ones((N_zsamples_theo,1))
                 bi_f = np.zeros_like(bi); bj_f = np.zeros_like(bj);
                 ni_f = np.ones_like(bi); nj_f = np.ones_like(bj);
-                ddi = ni; ddj = nj; dbi = 0*ni; dni = np.ones_like(bi); dnj = np.ones_like(bj); dbj = 0*nj
+
+                # used for Cl computation and no complex bias
                 di = ni; dj = nj
                 
         for k in range(N_ell):
-            # Here we compute the Cls analytically using the curly C matrix
+            # Here we compute the Cls analytically using the curly C matrix # bias mat is ones for complex bias
             matC_k = mat_cC[:,:,N_ell*type_xy+k]*bias_mat
             
             CL[k] = np.dot(np.dot(di,matC_k),dj)
@@ -807,7 +810,7 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
 
             if (compute_ders == True and complex_bz==True):
                 # n der: ba na_f Caj bj nj + bi ni Cia na_f ba
-                # b der: bi_f ni Caj bj nj + bj nj Cja na ba_f
+                # b der: bi_f ni Caj bj nj + bj nj Cja na ba_f 
                 if (i_tomo == j_tomo):
                     dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni_f*bi)+np.dot(bi*ni,matC_k)*(nj_f*bj).T
                     dCl_fast_all[N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni*bi_f)+np.dot(bi*ni,matC_k)*(nj*bj_f).T
@@ -817,12 +820,29 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
                     dCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(bi*ni,matC_k)*(nj_f*bj).T
                     dCl_fast_all[N_tomo*N_zsamples_theo+j_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(bi*ni,matC_k)*(nj*bj_f).T
                     
-            if (compute_2nd_ders == True): # NOT WORKING PERFECTLY
+            if (compute_2nd_ders == True and complex_bz==False): # NOT WORKING PERFECTLY
                 if (i_tomo == j_tomo):
-                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k+matC_k.T
+                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k*2
                 else:
                     ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k
-                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k#.T
+                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k
+            if (compute_2nd_ders == True and complex_bz==True): # NOT WORKING PERFECTLY # I think the ders are nor symmetric ,ab=/=,ba
+                # C^ij,b^a n^b der: bf^a_m na_m C_mn b^b_n nf^b_n delta^ia delta^jb + b^b_m nf^b_m C_mn bf^a_n na_n delta^ib delta^ja
+                # + b^i_m n^i_m C_mn bf^a_n nf^a_n delta^ab delta^ia delta^jb + bf^a_m nf^a_m C_mn b^j_n n^j_n delta^ab delta^ia delta^jb
+                if (i_tomo == j_tomo):
+                    # nn
+                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (bi_f*ni_f).T*matC_k*2
+                    # bb
+                    ddCl_fast_all[N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = matC_k*2
+                else:
+                    # nn
+                    ddCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (bi*ni_f).T*matC_k*(bj*nj_f).T
+                    # bb
+                    ddCl_fast_all[N_tomo*N_zsamples_theo+j_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(j_tomo+1)*N_zsamples_theo,N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (bi_f*ni).T*matC_k*(bj_f*nj).T
+                    # bn
+                    ddCl_fast_all[N_tomo*N_zsamples_theo+j_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(j_tomo+1)*N_zsamples_theo,i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (bi_f*ni).T*matC_k*(bj*nj_f).T
+                    # nb
+                    ddCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = (bi*ni_f).T*matC_k*(bj*nj_f).T
         # Finally add noise depending on type of correlation
         CL += noise
         # This is the usual, proven way of recording the Cls
