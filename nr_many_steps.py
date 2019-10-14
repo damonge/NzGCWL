@@ -240,7 +240,8 @@ print(N_gal_bin)
 # IF SOMETHING DOESN'T MAKE SENSE, SEE COMMENTS IN OTHER
 # FILE AND YELL IF THERE ARE MISTAKES
 
-def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,ell=ells,compute_inv_cov=False,plot_for_sanity=False,powerspec='halofit',simple_bias=True):
+def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,ell=ells,
+                compute_cov=False, compute_inv_cov=False,plot_for_sanity=False,powerspec='halofit',simple_bias=True):
     
     if powerspec == 'halofit':
         # Compute matter pk using halofit
@@ -353,7 +354,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
                 plt.savefig('Cls.png')
                 plt.close()
 
-    if compute_inv_cov == False:
+    if compute_inv_cov == False and compute_cov == False:
         print(len(CL_ALL))
         return CL_ALL
 
@@ -413,7 +414,8 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
                     N_ell,(N_ell*c_A):(N_ell*c_A)+N_ell] = np.diag(Cov_ijmn)
 
 
-            
+    if compute_cov:
+        return COV_ALL
 
     evals,evecs = la.eig(COV_ALL)
     
@@ -485,11 +487,12 @@ for i in np.arange(N_tomo):
 
 Cl_true = compute_Cls(params)
 # add noise
-#R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))  
-#X = la.cholesky(Cov).T                                                                      
-#Nl = np.dot(X,R)                                                                            
+Cov=compute_Cls(params,compute_cov=True)
+R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))  
+X = la.cholesky(Cov).T                                                                      
+Nl = np.dot(X,R)                                                                            
 # adding noise                                                                                   
-#Cl_true += Nl
+Cl_true += Nl
 
 # _______________________________________________
 #               REGULARIZATION PRIOR
@@ -522,6 +525,7 @@ for j in range(N_zsamples_theo*N_tomo):
     tmp0 = lam0.reshape(N_zsamples_theo*N_tomo,1)
     tmp = lam.reshape(N_zsamples_theo*N_tomo,1)    
 
+    print (tmp0)
     D0 += np.dot(tmp0,tmp0.T)
     D1 += np.dot(tmp,tmp.T)
 
@@ -640,50 +644,53 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
 # =====================================================
 #       SUMMON curly C (comment out for fastness)
 # =====================================================
-'''
-# generate the shapes
-N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
-z_many = z_s_cents
-Delta_z_s = np.mean(np.diff(z_s_cents_theo))
+
+cov_fname="mat_C_"+str(tomo)+"_"+str(zsam)+".npy"
+if not os.path.isfile(cov_fname):
+    print ("Generating ",cov_fname)
+    # generate the shapes
+    N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
+    z_many = z_s_cents
+    Delta_z_s = np.mean(np.diff(z_s_cents_theo))
 
 
-# Compute the many samples of the shapes - linear and nearest
-D_i_many = np.zeros((N_zsamples_theo,N_many))
-D_i_many_near = np.zeros((N_zsamples_theo,N_many))
+    # Compute the many samples of the shapes - linear and nearest
+    D_i_many = np.zeros((N_zsamples_theo,N_many))
+    D_i_many_near = np.zeros((N_zsamples_theo,N_many))
 
-for i in range(N_zsamples_theo):
-    D_i_many[i,:] = D_i(z_many,z_s_cents_theo[i],Delta_z_s)
-    D_i_many_near[i,:] = D_i_near(z_many,z_s_cents_theo[i],Delta_z_s)
-    plt.plot(z_many, D_i_many[i,:], label='linear z = %f'%(z_s_cents_theo[i]))
-    plt.plot(z_many, D_i_many_near[i,:], label='nearest z = %f'%(z_s_cents_theo[i]))
+    for i in range(N_zsamples_theo):
+        D_i_many[i,:] = D_i(z_many,z_s_cents_theo[i],Delta_z_s)
+        D_i_many_near[i,:] = D_i_near(z_many,z_s_cents_theo[i],Delta_z_s)
+        plt.plot(z_many, D_i_many[i,:], label='linear z = %f'%(z_s_cents_theo[i]))
+        plt.plot(z_many, D_i_many_near[i,:], label='nearest z = %f'%(z_s_cents_theo[i]))
 
 
-plt.legend()
-plt.xlabel("z", fontsize=14)
-plt.ylabel("p(z)", fontsize=14)
-plt.savefig("mD.png")
-plt.close()
+    plt.legend()
+    plt.xlabel("z", fontsize=14)
+    plt.ylabel("p(z)", fontsize=14)
+    plt.savefig("mD.png")
+    plt.close()
 
-# CURLY C INDEPENDENT OF REDSHIFT BIN
-# When computing, set the N_tomo_single to 1
-N_tomo_single = 1
+    # CURLY C INDEPENDENT OF REDSHIFT BIN
+    # When computing, set the N_tomo_single to 1
+    N_tomo_single = 1
 
-N_elm = (2*N_tomo_single+1)*N_tomo_single*N_ell # = 30 for gg, gs, ss
-mat_C = np.zeros((N_zsamples_theo,N_zsamples_theo,N_elm))
-# NOTE THAT curly C, i.e. mat_C is not symmetric
+    N_elm = (2*N_tomo_single+1)*N_tomo_single*N_ell # = 30 for gg, gs, ss
+    mat_C = np.zeros((N_zsamples_theo,N_zsamples_theo,N_elm))
+    # NOTE THAT curly C, i.e. mat_C is not symmetric
 
-for i in range(N_zsamples_theo):
-    for j in range(N_zsamples_theo):
-        print(i,j)
-        # In the function the dndz parameters are updated to the D_i_many guys
-        Cl_many = compute_mCs(params,i_zs=i,j_zs=j)
-        print(Cl_many.sum())
-        # record matrix entries for this choise of zsample bins i and j
-        mat_C[i,j,:] = Cl_many 
-        
-# Save curly C matrix
-np.save("mat_C_"+str(tomo)+"_"+str(zsam)+".npy",mat_C)
-'''
+    for i in range(N_zsamples_theo):
+        for j in range(N_zsamples_theo):
+            print(i,j)
+            # In the function the dndz parameters are updated to the D_i_many guys
+            Cl_many = compute_mCs(params,i_zs=i,j_zs=j)
+            print(Cl_many.sum())
+            # record matrix entries for this choise of zsample bins i and j
+            mat_C[i,j,:] = Cl_many 
+
+    # Save curly C matrix
+    np.save("mat_C_"+str(tomo)+"_"+str(zsam)+".npy",mat_C)
+
 # ___________________________________
 #  LOADING CURLY C AND ADDING NOISE
 # ___________________________________
@@ -915,3 +922,7 @@ print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(full_x))
 print("dndz_guess = ",(full_x0))
 
+with open('results.txt','w') as f:
+    for a,b,c in zip(dndz_data_theo.flatten(), full_x, full_x0):
+        f.write("%f %f %f \n"%(a,b,c))
+        
