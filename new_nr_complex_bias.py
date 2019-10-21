@@ -24,7 +24,7 @@ import scipy.linalg as la
 from scipy.interpolate import interp1d
 from scipy import asarray as ar,exp
 
-
+np.random.seed(300)
 
 # where to save plots
 direc = '/users/boryanah/HSC/figs/'
@@ -894,8 +894,7 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
 
             
 
-    evals,evecs = la.eig(Cov_fast_all)
-    
+       
     if (is_pos_def(Cov_fast_all) != True): print("Covariance is not positive definite!"); exit(0)
 
     if (compute_ders == False and compute_2nd_ders == False):
@@ -949,52 +948,132 @@ full_x0 = full_x.copy()
 # ____________________________________________
 
 
+# TESTING including first numerical derivative wrt to bz
+def compute_num_derivs_bz(ind_j,dval):                
+    dndz_z = dndz_this.copy()
+    b_z = bz_this.copy()
+    
+    b_z = b_z.reshape(N_tomo,N_zsamples_theo)
+    k = ind_j % N_zsamples_theo # gives sample                                                       
+    i = ind_j // N_zsamples_theo # gives tomo                                                            
+    bz_ik = b_z[i,k]                                                                                          
+    b_z[i,k] = bz_ik+dval                                                                                                
+    clp = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                                    
+    b_z[i,k] = bz_ik-dval                                                                                      
+    clm = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                                
+    return (clp-clm)/(2*dval) 
+
+# TESTING including second derivative wrt to bz
+def compute_num_2nd_derivs_bz(ind_j1,ind_j2,dval):
+    dndz_z = dndz_this.copy()
+    b_z = bz_this.copy()
+    
+    b_z = b_z.reshape(N_tomo,N_zsamples_theo)
+    k1 = ind_j1 % N_zsamples_theo # gives sample                                                                             
+    i1 = ind_j1 // N_zsamples_theo # gives tomo                                                                      
+    k2 = ind_j2 % N_zsamples_theo # gives sample                                                      
+    i2 = ind_j2 // N_zsamples_theo # gives tomo                                                     
+    # original value                                                                            
+    bz_ik1 = b_z[i1,k1]                                                                                          
+    b_z[i1,k1] = bz_ik1+dval                                                                                                     
+    bz_ik2 = b_z[i2,k2]                                                                                                           
+    b_z[i2,k2] = bz_ik2+dval                                                                                                  
+    clp1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                        
+    b_z[i2,k2] = bz_ik2-dval                                                                                                    
+    clp1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                    
+    b_z[i1,k1] = bz_ik1-dval                                                                                     
+    bz_ik2 = b_z[i2,k2]                                                                                                
+    b_z[i2,k2] = bz_ik2+dval                                                                                                
+    clm1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                  
+    b_z[i2,k2] = bz_ik2-dval                                                                             
+    clm1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                     
+    return ((clp1p2-clp1m2)-(clm1p2-clm1m2))/(4.*dval**2)
+
+# TESTING initializing the second derivative matrix
+ddCldp_fast = np.zeros((2*N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo,N_elm))
+
 for s in range(steps):    
     dndz_this = full_x[:(N_zsamples_theo*N_tomo)]
     bz_this = full_x[(N_zsamples_theo*N_tomo):2*(N_zsamples_theo*N_tomo)]
     print("Delta_dndz = ",np.sqrt(np.sum((dndz_data_theo.flatten()-dndz_this)**2)))
     print("Delta_bz = ",np.sqrt(np.sum((bz_data_theo.flatten()-bz_this)**2)))
     
-    # compute the Cls and their derivatives
-    
+    # compute the Cls and their derivatives analytically
     Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
-
     Cl_fast = Cl_fast.reshape(N_elm,1)
-
     iCov_fast = la.inv(Cov_fast)
-
     Delta_Cl = Cl_fast-Cl_true
 
+    '''
+    # INCLUDING THE SECOND DERIVATIVE ACTUALLY PRODUCES WORSE RESULTS; 1st der matches very well
+    # TESTING whether using first and second numerical derivatives wrt bz helps
+    for j1 in np.arange(N_tomo*N_zsamples_theo):
+        # These print statements demonstrate that the numerical first derivative is the same as the analytical
+        #print(np.mean(dCldp_fast[N_tomo*N_zsamples_theo+j1,:]))
+        dCldp_fast[N_tomo*N_zsamples_theo+j1,:] = compute_num_derivs_bz(j1,bz_dval)
+        #print(np.mean(dCldp_fast[N_tomo*N_zsamples_theo+j1,:]))
+        #print('____________________')
+        for j2 in np.arange(N_tomo*N_zsamples_theo):                                                        
+            ddCldp_fast[N_zsamples_theo*N_tomo+j1,N_zsamples_theo*N_tomo+j2,:] = compute_num_2nd_derivs_bz(j1,j2,bz_dval)
+    '''
+    
     # extra regularization term
-    # TESTING
     n_diff = (dndz_this).reshape(N_zsamples_theo*N_tomo,1)
     Reg_V = np.dot(D,n_diff)-1./N_tomo
     Reg_A = D
     reg = 0#1.e14
     
     print("sum_dndz = ",np.sum(dndz_this))
+    print("sum_bz = ",np.sum(bz_this))
     print("chi2_reg = ",np.dot(dndz_this.T,np.dot(Reg_A,dndz_this))-2*np.sum(dndz_this)/N_tomo+1)
 
+    # Regularization matrix A and vector V for keeping sum fixed and derivatives smooth
     R_full_A = np.zeros((2*N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo))
     R_full_A[:N_zsamples_theo*N_tomo,:N_zsamples_theo*N_tomo] = reg*Reg_A
+    # TESTING applying regularization to the bz part of the matrix
+    #R_full_A[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo] = reg*Reg_A
+    
     R_full_V = np.zeros((2*N_zsamples_theo*N_tomo,1))
     R_full_V[:N_zsamples_theo*N_tomo] = reg*Reg_V
-    A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T)) + R_full_A
-    V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_full_V 
+    # TESTING applying regularization to the bz part of the vector
+    #R_full_V[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo] = reg*Reg_V
+
+    # original version without second derivative
+    #A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T)) + R_full_A
+
+    # TESTING whether including second derivative helps
+    second_der_term = np.zeros((2*N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo))
+    for m in range(N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo):
+        for n in range(N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo):
+            second_der_term[m,n] = np.dot(Delta_Cl.T,np.dot(iCov_fast,ddCldp_fast[m,n,:].reshape(N_elm,1)))  
     
+    # matrix A and vector V which determine the direction of the next step
+    A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T))+second_der_term + R_full_A
+    V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_full_V 
+
+    # compute chi2 for this try
     chi2 = np.dot(Delta_Cl.T,np.dot(iCov_fast,Delta_Cl))[0][0]
     print("chi2 = ",chi2)
     print("__________________________")
+
+    # TESING whether fixing dndz and varying only 'bz' or vice versa or verying everything works properly
+    testing_vary_only = 'bz'#'bz'#'dndz'#0
+    if testing_vary_only == 'bz': select1 = 1; select2 = 2
+    if testing_vary_only == 'dndz': select1 = 0; select2 = 1
+    if testing_vary_only == 0: select1 = 0; select2 = 2
+    A = A[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo,select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo]
+    V = V[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo]
     iA = la.inv(A)
-    
-    full_x += -np.dot(iA,V).flatten()
+    full_x[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo] += -np.dot(iA,V).flatten()
+    # original version for the N-R step
+    #full_x += -np.dot(iA,V).flatten()
 
 
 print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(dndz_this))
 print("dndz_guess = ",(full_x0[:N_zsamples_theo*N_tomo]))
 
-print("dndz_true = ",(bz_data_theo.flatten()))
+print("bz_true = ",(bz_data_theo.flatten()))
 print("bz_answer = ",(bz_this))
 print("bz_guess = ",(full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo]))
 

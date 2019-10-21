@@ -992,6 +992,34 @@ def compute_num_2nd_derivs(ind_j1,ind_j2,dval):
 
     return ((clp1p2-clp1m2)-(clm1p2-clm1m2))/(4.*dval**2)
 
+def compute_num_2nd_derivs_bz(ind_j1,ind_j2,dval):
+    dndz_z = dndz_data_theo.copy()
+    b_z = bz_z.copy()
+    
+    k1 = ind_j1 % N_zsamples_theo # gives sample
+    i1 = ind_j1 // N_zsamples_theo # gives tomo
+    k2 = ind_j2 % N_zsamples_theo # gives sample
+    i2 = ind_j2 // N_zsamples_theo # gives tomo
+
+    # original value
+    bz_ik1 = b_z[i1,k1]
+    
+    b_z[i1,k1] = bz_ik1+dval
+    bz_ik2 = b_z[i2,k2]
+    b_z[i2,k2] = bz_ik2+dval
+    clp1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)
+    b_z[i2,k2] = bz_ik2-dval
+    clp1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)
+
+    b_z[i1,k1] = bz_ik1-dval
+    bz_ik2 = b_z[i2,k2]
+    b_z[i2,k2] = bz_ik2+dval
+    clm1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)
+    b_z[i2,k2] = bz_ik2-dval
+    clm1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)
+
+    return ((clp1p2-clp1m2)-(clm1p2-clm1m2))/(4.*dval**2)
+
 mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
 temp = np.arange(2*N_tomo)
 temp = np.vstack((temp,temp)).T

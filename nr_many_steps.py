@@ -894,7 +894,7 @@ for s in range(steps):
     Cl_fast = Cl_fast.reshape(N_elm,1)
 
     iCov_fast = la.inv(Cov_fast)
-
+    print(la.eig(iCov_fast)[0])
     Delta_Cl = Cl_fast-Cl_true
 
     # extra regularization term
