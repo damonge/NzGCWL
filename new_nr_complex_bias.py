@@ -26,6 +26,8 @@ from scipy import asarray as ar,exp
 
 np.random.seed(300)
 
+LOGB = False
+
 # where to save plots
 direc = '/users/boryanah/HSC/figs/'
 # ask the user kindly to tell you those
@@ -931,6 +933,9 @@ Cl_true = Cl_true.reshape(N_elm,1)
 # bz guess
 bz_guess = bz_data_theo.flatten()+0.1*np.random.randn(N_zsamples_theo*N_tomo)
 
+if LOGB == True:
+    bz_guess = np.log(bz_guess)
+
 # parameter vector
 full_x = np.hstack((dndz_data_theo.flatten().copy(),bz_guess))
 
@@ -955,12 +960,12 @@ def compute_num_derivs_bz(ind_j,dval):
     
     b_z = b_z.reshape(N_tomo,N_zsamples_theo)
     k = ind_j % N_zsamples_theo # gives sample                                                       
-    i = ind_j // N_zsamples_theo # gives tomo                                                            
-    bz_ik = b_z[i,k]                                                                                          
-    b_z[i,k] = bz_ik+dval                                                                                                
-    clp = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                                    
-    b_z[i,k] = bz_ik-dval                                                                                      
-    clm = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                                
+    i = ind_j // N_zsamples_theo # gives tomo                
+    bz_ik = b_z[i,k]                                                              
+    b_z[i,k] = bz_ik+dval                                                                
+    clp = compute_fast_Cls(dndz_z,mat_C,b_z)                                                         
+    b_z[i,k] = bz_ik-dval                                                                  
+    clm = compute_fast_Cls(dndz_z,mat_C,b_z)   
     return (clp-clm)/(2*dval) 
 
 # TESTING including second derivative wrt to bz
@@ -969,24 +974,24 @@ def compute_num_2nd_derivs_bz(ind_j1,ind_j2,dval):
     b_z = bz_this.copy()
     
     b_z = b_z.reshape(N_tomo,N_zsamples_theo)
-    k1 = ind_j1 % N_zsamples_theo # gives sample                                                                             
-    i1 = ind_j1 // N_zsamples_theo # gives tomo                                                                      
-    k2 = ind_j2 % N_zsamples_theo # gives sample                                                      
-    i2 = ind_j2 // N_zsamples_theo # gives tomo                                                     
+    k1 = ind_j1 % N_zsamples_theo # gives sample                                     
+    i1 = ind_j1 // N_zsamples_theo # gives tomo                                 
+    k2 = ind_j2 % N_zsamples_theo # gives sample                                         
+    i2 = ind_j2 // N_zsamples_theo # gives tomo                                       
     # original value                                                                            
-    bz_ik1 = b_z[i1,k1]                                                                                          
-    b_z[i1,k1] = bz_ik1+dval                                                                                                     
-    bz_ik2 = b_z[i2,k2]                                                                                                           
-    b_z[i2,k2] = bz_ik2+dval                                                                                                  
-    clp1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                        
-    b_z[i2,k2] = bz_ik2-dval                                                                                                    
-    clp1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                    
-    b_z[i1,k1] = bz_ik1-dval                                                                                     
-    bz_ik2 = b_z[i2,k2]                                                                                                
-    b_z[i2,k2] = bz_ik2+dval                                                                                                
-    clm1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                                  
-    b_z[i2,k2] = bz_ik2-dval                                                                             
-    clm1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                                     
+    bz_ik1 = b_z[i1,k1]                                                   
+    b_z[i1,k1] = bz_ik1+dval                                      
+    bz_ik2 = b_z[i2,k2]                                                                  
+    b_z[i2,k2] = bz_ik2+dval                                                
+    clp1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                               
+    b_z[i2,k2] = bz_ik2-dval                                                               
+    clp1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                         
+    b_z[i1,k1] = bz_ik1-dval                                                     
+    bz_ik2 = b_z[i2,k2]                                                     
+    b_z[i2,k2] = bz_ik2+dval                                                               
+    clm1p2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                   
+    b_z[i2,k2] = bz_ik2-dval                                          
+    clm1m2 = compute_fast_Cls(dndz_z,mat_C,b_z)                                 
     return ((clp1p2-clp1m2)-(clm1p2-clm1m2))/(4.*dval**2)
 
 # TESTING initializing the second derivative matrix
@@ -995,18 +1000,25 @@ ddCldp_fast = np.zeros((2*N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo,N_elm)
 for s in range(steps):    
     dndz_this = full_x[:(N_zsamples_theo*N_tomo)]
     bz_this = full_x[(N_zsamples_theo*N_tomo):2*(N_zsamples_theo*N_tomo)]
+    
     print("Delta_dndz = ",np.sqrt(np.sum((dndz_data_theo.flatten()-dndz_this)**2)))
-    print("Delta_bz = ",np.sqrt(np.sum((bz_data_theo.flatten()-bz_this)**2)))
+    if LOGB == True:
+        print("Delta_bz = ",np.sqrt(np.sum((bz_data_theo.flatten()-np.exp(bz_this))**2)))
+    else:
+        print("Delta_bz = ",np.sqrt(np.sum((bz_data_theo.flatten()-(bz_this))**2)))
     
     # compute the Cls and their derivatives analytically
-    Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
+    if LOGB == True:
+        Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,np.exp(bz_this),compute_ders=True,compute_2nd_ders=False,compute_cov=True)
+    else:
+        Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,(bz_this),compute_ders=True,compute_2nd_ders=False,compute_cov=True)
     Cl_fast = Cl_fast.reshape(N_elm,1)
     iCov_fast = la.inv(Cov_fast)
     Delta_Cl = Cl_fast-Cl_true
 
     '''
+    # TESTING uncomment for second and first num der wrt bz
     # INCLUDING THE SECOND DERIVATIVE ACTUALLY PRODUCES WORSE RESULTS; 1st der matches very well
-    # TESTING whether using first and second numerical derivatives wrt bz helps
     for j1 in np.arange(N_tomo*N_zsamples_theo):
         # These print statements demonstrate that the numerical first derivative is the same as the analytical
         #print(np.mean(dCldp_fast[N_tomo*N_zsamples_theo+j1,:]))
@@ -1024,7 +1036,10 @@ for s in range(steps):
     reg = 0#1.e14
     
     print("sum_dndz = ",np.sum(dndz_this))
-    print("sum_bz = ",np.sum(bz_this))
+    if LOGB == True:
+        print("sum_bz = ",np.sum(np.exp(bz_this)))
+    else:
+        print("sum_bz = ",np.sum((bz_this)))    
     print("chi2_reg = ",np.dot(dndz_this.T,np.dot(Reg_A,dndz_this))-2*np.sum(dndz_this)/N_tomo+1)
 
     # Regularization matrix A and vector V for keeping sum fixed and derivatives smooth
@@ -1051,6 +1066,11 @@ for s in range(steps):
     A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T))+second_der_term + R_full_A
     V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_full_V 
 
+    if LOGB == True:
+        A[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo] *= (np.exp(bz_this).reshape(N_zsamples_theo*N_tomo,1))
+        A[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo] *= (np.exp(bz_this).reshape(1,N_zsamples_theo*N_tomo))
+        V[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo] *= np.exp(bz_this).reshape(N_zsamples_theo*N_tomo,1)
+        
     # compute chi2 for this try
     chi2 = np.dot(Delta_Cl.T,np.dot(iCov_fast,Delta_Cl))[0][0]
     print("chi2 = ",chi2)
@@ -1062,8 +1082,13 @@ for s in range(steps):
     if testing_vary_only == 'dndz': select1 = 0; select2 = 1
     if testing_vary_only == 0: select1 = 0; select2 = 2
     A = A[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo,select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo]
+
+    
     V = V[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo]
+
+    
     iA = la.inv(A)
+    
     full_x[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo] += -np.dot(iA,V).flatten()
     # original version for the N-R step
     #full_x += -np.dot(iA,V).flatten()
@@ -1074,6 +1099,9 @@ print("dndz_answer = ",(dndz_this))
 print("dndz_guess = ",(full_x0[:N_zsamples_theo*N_tomo]))
 
 print("bz_true = ",(bz_data_theo.flatten()))
-print("bz_answer = ",(bz_this))
-print("bz_guess = ",(full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo]))
-
+if LOGB == True:
+    print("bz_answer = ",(np.exp(bz_this)))
+    print("bz_guess = ",(np.exp(full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo])))
+else:
+    print("bz_answer = ",((bz_this)))
+    print("bz_guess = ",((full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo])))
