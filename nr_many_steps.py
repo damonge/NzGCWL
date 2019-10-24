@@ -1,4 +1,7 @@
 # FOR NOW WORKS ONLY WITH NEAREST
+#
+# Need  export PYTHONPATH="../LSSLike/desclss":$PYTHONPATH
+#
 import matplotlib
 matplotlib.use('Agg')
 import numpy as np
@@ -485,14 +488,31 @@ for i in np.arange(N_tomo):
         params['b_%02d'%k]  = {'val':b_zsamples[k]  ,'dval':0.02 ,'label':'$b_%02d$'%k ,'isfree':False}
         params['dndz_%02d_%02d'%(i,k)]  = {'val':dndz_data[i,k] ,'dval':0.1 ,'label':'dndz_%02d_%02d'%(i,k),'isfree':False}
 
-Cl_true = compute_Cls(params)
+cl_fname="Cltrue_"+str(tomo)+"_"+str(zsam)+"_"+str(functional)+".npy"
+if not os.path.isfile(cl_fname):
+    print ("Computing Cl_true")
+    Cl_true=compute_Cls(params)
+    print ("done")
+    np.save(cl_fname,Cl_true)
+else:
+    Cl_true = np.load(cl_fname)
+
 # add noise
-Cov=compute_Cls(params,compute_cov=True)
-R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))  
-X = la.cholesky(Cov).T                                                                      
-Nl = np.dot(X,R)                                                                            
-# adding noise                                                                                   
-Cl_true += Nl
+add_noise=True
+if (add_noise):
+    cln_fname="Clnoise_"+str(tomo)+"_"+str(zsam)+"_"+str(functional)+".npy"
+    if not os.path.isfile(cln_fname):
+        print ("computing cov for noise")
+        Cov=compute_Cls(params,compute_cov=True)
+        print ("done")
+        np.save(cln_fname,Cov)
+    else:
+        Cov=np.load(cln_fname)
+    R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))  
+    X = la.cholesky(Cov).T                                                                      
+    Nl = np.dot(X,R)                                                                            
+    # adding noise                                                                                   
+    Cl_true += 0.2*Nl
 
 # _______________________________________________
 #               REGULARIZATION PRIOR
@@ -502,39 +522,38 @@ dndz_dval = 0.02
 sigma0 = 0.000001
 sigma1 = 0.2
 sigma2 = 0.2
-# This is regularization of first derivative
+
+## first and second derivatives
 D1 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
-# This ensures sum is 1
-D0 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
+D2 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
+theo = dndz_data_theo.flatten()
+for i in range(N_tomo):
+    for j in range (0,N_zsamples_theo-1):
+        lam = np.zeros(N_zsamples_theo*N_tomo)
+        lam[i*N_zsamples_theo+j]=1
+        lam[i*N_zsamples_theo+j+1]=-1
+        D1+=np.outer(lam,lam)
+    for j in range (1,N_zsamples_theo-1):
+        lam = np.zeros(N_zsamples_theo*N_tomo)
+        lam[i*N_zsamples_theo+j-1]=-1
+        lam[i*N_zsamples_theo+j]=2
+        lam[i*N_zsamples_theo+j+1]=-1
+        D2+=np.outer(lam,lam)
+        
 
-lam0 = np.zeros(N_zsamples_theo*N_tomo)
-lam = np.zeros(N_zsamples_theo*N_tomo)
-for j in range(N_zsamples_theo*N_tomo):
-    i_tomo = j//N_zsamples_theo
-    i_zsam = j%N_zsamples_theo
-    lam *= 0
-    lam0 *= 0
-    lam0[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo]=1.
+sigma1sq=np.dot(np.dot(D1,theo),theo)
+sigma2sq=np.dot(np.dot(D2,theo),theo)
+test=np.ones(len(theo))
+print (np.dot(np.dot(D1,test),test),' is zero?')
+print (np.dot(np.dot(D2,test),test),' is zero?')
+test=np.arange(len(theo))
+print (np.dot(np.dot(D1,test),test),' is finite?')
+print (np.dot(np.dot(D2,test),test),' is zero?')
 
-    if (i_zsam+1<N_zsamples_theo):
-        ip1 = j+1
-        lam[ip1] = -1./dndz_dval 
-    if (i_zsam-1>=0):
-        im1 = j-1
-        lam[im1] = 1./dndz_dval
-    tmp0 = lam0.reshape(N_zsamples_theo*N_tomo,1)
-    tmp = lam.reshape(N_zsamples_theo*N_tomo,1)    
+D1 /= (3**2*sigma1sq)
+D2 /= (3**2*sigma2sq)
 
-    print (tmp0)
-    D0 += np.dot(tmp0,tmp0.T)
-    D1 += np.dot(tmp,tmp.T)
-
-#print(D0)
-D0 /= N_tomo**2#sigma0**2.
-D1 /= sigma1**2.
-
-
-D = D0#+D1
+D = D1+D2
 
 
 # ___________________________________
@@ -900,12 +919,12 @@ for s in range(steps):
     # extra regularization term
     # TESTING
     n_diff = (full_x).reshape(N_zsamples_theo*N_tomo,1)
-    Reg_V = np.dot(D,n_diff)-1./N_tomo
+    Reg_V = np.dot(D,n_diff)
     Reg_A = D
-    reg = 0#1.e14
+    reg = 100
     
     print("sum_dndz = ",np.sum(full_x))
-    print("chi2_reg = ",np.dot(full_x.T,np.dot(Reg_A,full_x))-2*np.sum(full_x)/N_tomo+1)
+    print("D price = ",np.dot(full_x,np.dot(D,full_x)), np.dot(np.dot(D,theo),theo))
     
     A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T)) + reg*Reg_A
     V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + reg*Reg_V
@@ -915,8 +934,7 @@ for s in range(steps):
     print("__________________________")
     iA = la.inv(A)
     
-    full_x += -np.dot(iA,V).flatten()
-
+    full_x += -0.5*np.dot(iA,V).flatten()
 
 print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(full_x))
