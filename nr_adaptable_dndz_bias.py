@@ -1049,6 +1049,9 @@ print("dndz_answer = ",(dndz_this))
 print("dndz_guess = ",(full_x0[:N_zsamples_theo*N_tomo]))
 
 print("bz_true = ",(bz_data_theo.flatten()))
-
 print("bz_answer = ",((bz_this)))
 print("bz_guess = ",((full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo])))
+
+with open('results_dndz_bz_true_answer_initial.txt','w') as f:
+    for a,b,c in zip(np.hstack((dndz_data_theo.flatten(),bz_data_theo.flatten())), full_x, full_x0):
+        f.write("%f %f %f \n"%(a,b,c))
