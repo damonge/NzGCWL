@@ -494,54 +494,68 @@ for i in np.arange(N_tomo):
         params['b_%02d_%02d'%(i,k)]  = {'val':bz_data[i,k]  ,'dval':0.02 ,'label':'$b_%02d_%02d$'%(i,k) ,'isfree':False}
         params['dndz_%02d_%02d'%(i,k)]  = {'val':dndz_data[i,k] ,'dval':0.02 ,'label':'dndz_%02d_%02d'%(i,k),'isfree':False}
 
-Cl_true = compute_Cls(params)
+cl_fname="Cltrue_"+str(tomo)+"_"+str(zsam)+"_"+str(functional)+".npy"
+if not os.path.isfile(cl_fname):
+    print ("Computing Cl_true")
+    Cl_true=compute_Cls(params)
+    print ("done")
+    np.save(cl_fname,Cl_true)
+else:
+    Cl_true = np.load(cl_fname)
+
 # add noise
-#R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))  
-#X = la.cholesky(Cov).T                                                                      
-#Nl = np.dot(X,R)                                                                            
-# adding noise                                                                                   
-#Cl_true += Nl
+add_noise=True
+if (add_noise):
+    cln_fname="Clnoise_"+str(tomo)+"_"+str(zsam)+"_"+str(functional)+".npy"
+    if not os.path.isfile(cln_fname):
+        print ("computing cov for noise")
+        Cov = compute_Cls(params,compute_cov=True)
+        print ("done")
+        np.save(cln_fname,Cov)
+    else:
+        Cov=np.load(cln_fname)
+    R = np.random.normal(0.,1.,N_ell*N_tomo*(2*N_tomo+1))  
+    X = la.cholesky(Cov).T                                                                      
+    Nl = np.dot(X,R)                                                                            
+    # adding noise                                                                                   
+    Cl_true += 0.2*Nl
+    # WHY 0.2?
 
 # _______________________________________________
 #               REGULARIZATION PRIOR
 # _______________________________________________
 
-dndz_dval = 0.02
-sigma0 = 0.000001
-sigma1 = 0.2
-sigma2 = 0.2
-# This is regularization of first derivative
+## first and second derivatives
 D1 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
-# This ensures sum is 1
-D0 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
+D2 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
+theo = dndz_data_theo.flatten()
+for i in range(N_tomo):
+    for j in range (0,N_zsamples_theo-1):
+        lam = np.zeros(N_zsamples_theo*N_tomo)
+        lam[i*N_zsamples_theo+j]=1
+        lam[i*N_zsamples_theo+j+1]=-1
+        D1+=np.outer(lam,lam)
+    for j in range (1,N_zsamples_theo-1):
+        lam = np.zeros(N_zsamples_theo*N_tomo)
+        lam[i*N_zsamples_theo+j-1]=-1
+        lam[i*N_zsamples_theo+j]=2
+        lam[i*N_zsamples_theo+j+1]=-1
+        D2+=np.outer(lam,lam)
+        
 
-lam0 = np.zeros(N_zsamples_theo*N_tomo)
-lam = np.zeros(N_zsamples_theo*N_tomo)
-for j in range(N_zsamples_theo*N_tomo):
-    i_tomo = j//N_zsamples_theo
-    i_zsam = j%N_zsamples_theo
-    lam *= 0
-    lam0 *= 0
-    lam0[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo]=1.
+sigma1sq=np.dot(np.dot(D1,theo),theo)
+sigma2sq=np.dot(np.dot(D2,theo),theo)
+test=np.ones(len(theo))
+print (np.dot(np.dot(D1,test),test),' is zero?')
+print (np.dot(np.dot(D2,test),test),' is zero?')
+test=np.arange(len(theo))
+print (np.dot(np.dot(D1,test),test),' is finite?')
+print (np.dot(np.dot(D2,test),test),' is zero?')
 
-    if (i_zsam+1<N_zsamples_theo):
-        ip1 = j+1
-        lam[ip1] = -1./dndz_dval 
-    if (i_zsam-1>=0):
-        im1 = j-1
-        lam[im1] = 1./dndz_dval
-    tmp0 = lam0.reshape(N_zsamples_theo*N_tomo,1)
-    tmp = lam.reshape(N_zsamples_theo*N_tomo,1)    
+D1 /= (3**2*sigma1sq)
+D2 /= (3**2*sigma2sq)
 
-    D0 += np.dot(tmp0,tmp0.T)
-    D1 += np.dot(tmp,tmp.T)
-
-#print(D0)
-D0 /= N_tomo**2#sigma0**2.
-D1 /= sigma1**2.
-
-
-D = D0#+D1
+D = D1+D2 #D0
 
 
 # ___________________________________
@@ -651,50 +665,52 @@ def compute_mCs(par,i_zs,j_zs,z_cent=z_s_cents,k_arr=k_ar,z_arr=z_ar,a_arr=a_ar,
 # =====================================================
 #       SUMMON curly C (comment out for fastness)
 # =====================================================
-'''
-# generate the shapes
-N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
-z_many = z_s_cents
-Delta_z_s = np.mean(np.diff(z_s_cents_theo))
+cov_fname="mat_C_"+str(tomo)+"_"+str(zsam)+".npy"
+if not os.path.isfile(cov_fname):
+    print ("Generating ",cov_fname)
+    # generate the shapes
+    N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
+    z_many = z_s_cents
+    Delta_z_s = np.mean(np.diff(z_s_cents_theo))
 
 
-# Compute the many samples of the shapes - linear and nearest
-D_i_many = np.zeros((N_zsamples_theo,N_many))
-D_i_many_near = np.zeros((N_zsamples_theo,N_many))
+    # Compute the many samples of the shapes - linear and nearest
+    D_i_many = np.zeros((N_zsamples_theo,N_many))
+    D_i_many_near = np.zeros((N_zsamples_theo,N_many))
 
-for i in range(N_zsamples_theo):
-    D_i_many[i,:] = D_i(z_many,z_s_cents_theo[i],Delta_z_s)
-    D_i_many_near[i,:] = D_i_near(z_many,z_s_cents_theo[i],Delta_z_s)
-    plt.plot(z_many, D_i_many[i,:], label='linear z = %f'%(z_s_cents_theo[i]))
-    plt.plot(z_many, D_i_many_near[i,:], label='nearest z = %f'%(z_s_cents_theo[i]))
+    for i in range(N_zsamples_theo):
+        D_i_many[i,:] = D_i(z_many,z_s_cents_theo[i],Delta_z_s)
+        D_i_many_near[i,:] = D_i_near(z_many,z_s_cents_theo[i],Delta_z_s)
+        plt.plot(z_many, D_i_many[i,:], label='linear z = %f'%(z_s_cents_theo[i]))
+        plt.plot(z_many, D_i_many_near[i,:], label='nearest z = %f'%(z_s_cents_theo[i]))
 
 
-plt.legend()
-plt.xlabel("z", fontsize=14)
-plt.ylabel("p(z)", fontsize=14)
-plt.savefig("mD.png")
-plt.close()
+    plt.legend()
+    plt.xlabel("z", fontsize=14)
+    plt.ylabel("p(z)", fontsize=14)
+    plt.savefig("mD.png")
+    plt.close()
 
-# CURLY C INDEPENDENT OF REDSHIFT BIN
-# When computing, set the N_tomo_single to 1
-N_tomo_single = 1
+    # CURLY C INDEPENDENT OF REDSHIFT BIN
+    # When computing, set the N_tomo_single to 1
+    N_tomo_single = 1
 
-N_elm = (2*N_tomo_single+1)*N_tomo_single*N_ell # = 30 for gg, gs, ss
-mat_C = np.zeros((N_zsamples_theo,N_zsamples_theo,N_elm))
-# NOTE THAT curly C, i.e. mat_C is not symmetric
+    N_elm = (2*N_tomo_single+1)*N_tomo_single*N_ell # = 30 for gg, gs, ss
+    mat_C = np.zeros((N_zsamples_theo,N_zsamples_theo,N_elm))
+    # NOTE THAT curly C, i.e. mat_C is not symmetric
 
-for i in range(N_zsamples_theo):
-    for j in range(N_zsamples_theo):
-        print(i,j)
-        # In the function the dndz parameters are updated to the D_i_many guys
-        Cl_many = compute_mCs(params,i_zs=i,j_zs=j)
-        print(Cl_many.sum())
-        # record matrix entries for this choise of zsample bins i and j
-        mat_C[i,j,:] = Cl_many 
+    for i in range(N_zsamples_theo):
+        for j in range(N_zsamples_theo):
+            print(i,j)
+            # In the function the dndz parameters are updated to the D_i_many guys
+            Cl_many = compute_mCs(params,i_zs=i,j_zs=j)
+            print(Cl_many.sum())
+            # record matrix entries for this choise of zsample bins i and j
+            mat_C[i,j,:] = Cl_many 
         
-# Save curly C matrix
-np.save("mat_C_"+str(tomo)+"_"+str(zsam)+".npy",mat_C)
-'''
+    # Save curly C matrix
+    np.save("mat_C_"+str(tomo)+"_"+str(zsam)+".npy",mat_C)
+
 # ___________________________________
 #  LOADING CURLY C AND ADDING NOISE
 # ___________________________________
@@ -947,7 +963,7 @@ full_x0 = full_x.copy()
 #                 NEWTON-RAPHSON
 # ____________________________________________
 
-al_i = 1.e-7#5 for 3#7 for 7
+al_i = 1.#1.e-1#7#5 for 3#7 for 7 # 1 if varying just one
 alpha = al_i
 for s in range(steps):    
     dndz_this = full_x[:(N_zsamples_theo*N_tomo)]
@@ -964,13 +980,14 @@ for s in range(steps):
 
     # regularization
     n_diff = (dndz_this).reshape(N_zsamples_theo*N_tomo,1)
-    Reg_V = np.dot(D,n_diff)-1./N_tomo
+    Reg_V = np.dot(D,n_diff)
     Reg_A = D
-    reg = 0#1.e14
+    reg = 100#1.e14
     
     print("sum_dndz = ",np.sum(dndz_this))
     print("sum_bz = ",np.sum((bz_this)))    
-    print("chi2_reg = ",np.dot(dndz_this.T,np.dot(Reg_A,dndz_this))-2*np.sum(dndz_this)/N_tomo+1)
+    #print("D price = ",np.dot(full_x,np.dot(D,full_x)), np.dot(np.dot(D,theo),theo))
+    
     # compute chi2 for this try
     if s == 0: chi2_old = 1.e50; chi2_min = 1.e50
     else: chi2_old = chi2
@@ -985,7 +1002,11 @@ for s in range(steps):
     
     R_full_V = np.zeros((2*N_zsamples_theo*N_tomo,1))
     R_full_V[:N_zsamples_theo*N_tomo] = reg*Reg_V
-        
+
+    # TESTING REGULARIZATION FOR BZ
+    R_full_A[N_zsamples_theo*N_tomo:N_zsamples_theo*N_tomo*2,N_zsamples_theo*N_tomo:N_zsamples_theo*N_tomo*2] = reg*Reg_A
+    R_full_V[N_zsamples_theo*N_tomo:N_zsamples_theo*N_tomo*2] = reg*Reg_V
+    
     # original version without second derivative
     A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T)) + R_full_A
     V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_full_V 
