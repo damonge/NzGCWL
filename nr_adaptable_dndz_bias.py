@@ -1,4 +1,4 @@
-# THIS CODE CHECKS THAT THE FIRST DERIVATIVE WRT TO BOTH DNDZ AND BZ WORKS WHERE BZ NOW HAS NT*NZ PARAMS
+# Newton-Raphson adaptable step algorithm (caps for important comments)
 # SECOND DERIVATIVE NOT FULLY WORKING
 # FOR NOW WORKS ONLY WITH NEAREST
 import matplotlib
@@ -32,7 +32,7 @@ direc = '/users/boryanah/HSC/figs/'
 tomo = sys.argv[1]
 zsam = sys.argv[2]
 steps = int(sys.argv[3])
-functional = int(sys.argv[4])
+functional = int(sys.argv[4]) # I think that's if we want made up data
 # ___________________________________
 #             PARAMETERS
 # ___________________________________
@@ -66,6 +66,7 @@ z_s_edges_theo = np.linspace(z_ini_sample,z_end_sample,N_zsamples_theo+1)
 z_s_cents_theo = (z_s_edges_theo[1:]+z_s_edges_theo[:-1])*.5
 z_bin_edges = np.linspace(z_ini_bin,z_end_bin,N_tomo+1)
 z_bin_cents = (z_bin_edges[1:]+z_bin_edges[:-1])*.5
+Delta_z_bin = np.mean(np.diff(z_bin_edges))
 sigma_e2 = np.ones(N_tomo)*(.4**2) # THIS VALUE ASSUMED
 
 # Power spectrum parameters
@@ -102,11 +103,6 @@ hod_params = {
     'm0_1': 10.34,#
     'm1_0': 7.08,#
     'm1_1': 9.34}#
-
-# ___________________________________
-#          END OF PARAMETERS
-# ___________________________________
-
 
 # ___________________________________
 #          CATALOGUE LOADING
@@ -295,7 +291,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
         t_i = comb[0]//N_tomo # tracer type 0 means g and 1 means s
         t_j = comb[1]//N_tomo # tracer type 0 means g and 1 means s
         
-        # NOISE
+        # Noise
         if (i == j):
             # number density of galaxies
             N_gal = N_gal_sample[i]            
@@ -361,7 +357,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
     print(np.sum(CL_ALL>0))
     
     COV_ALL = np.zeros((len(CL_ALL),len(CL_ALL)))    
-    # COMPUTE COVARIANCE MATRIX 
+    # Compute covariance matrix
     for c_A, comb_A in enumerate(all_combos):
         for c_B, comb_B in enumerate(all_combos):
             i = comb_A[0]%N_tomo # first redshift bin
@@ -425,8 +421,7 @@ def compute_Cls(par,hod_par=hod_params,z_cent=z_s_cents,N_gal_sample=N_gal_bin,k
 # COMPUTING FOR PARTICULAR COSMOLOGY
 # ___________________________________
 
-# Cosmological parameters
-# Those 6 will be sampled
+# 6 standard cosmological parameters
 params={}
 params['Omb']= {'val':0.0493,'dval':0.005,'label':'$\\Omega_b$','isfree':False}
 params['Omc']= {'val':0.264,'dval':0.005,'label':'$\\Omega_c$','isfree':False}
@@ -443,7 +438,7 @@ n_s = params['n_s']['val']
 Omc = params['Omc']['val']
 
     
-# SETTING THE COSMOLOGY
+# Setting the cosmology
 FID_COSMO_PARAMS = {'Omega_b': Omb,
                     'Omega_k': Omk,
                     'sigma8': s8,
@@ -454,7 +449,6 @@ FID_COSMO_PARAMS = {'Omega_b': Omb,
                     'matter_power_spectrum': 'halofit',
                     'mass_function': 'tinker10'
                     }
-    
 cosmo_fid = ccl.Cosmology(**FID_COSMO_PARAMS)
 
 # load biases
@@ -466,7 +460,8 @@ bz_data_theo = np.repeat(b_zsamples_theo.reshape(1,N_zsamples_theo),N_tomo,axis=
 bz_data = np.zeros((N_tomo,N_zsamples))
 
 for i in range(N_tomo):
-    bz_data_theo[i,:] += .2*np.random.randn(N_zsamples_theo)
+    bz_data_theo[i,:] += 0#.2*np.random.randn(N_zsamples_theo) # TESTING MAKES A HUGE DIFFERENCE IF VARYING DNDZ only
+    # can go down to 0.01 for 7 7 dndz only no reg and 1.6 for 7 20 dndz only D1+D2 or no reg (but fucks up)
     # interpolating to nearest to pass to code
     if interp == 'nearest':
         f = interp1d(np.append(z_s_cents_theo,np.array([z_s_cents[0],z_s_cents[-1]])),np.append(bz_data_theo[i,:],np.array([bz_data_theo[i,0],bz_data_theo[i,-1]])),kind='nearest',bounds_error=0,fill_value=0.)
@@ -475,10 +470,10 @@ for i in range(N_tomo):
 
     b_zsamples = f(z_s_cents)
     bz_data[i,:] = b_zsamples
-    plt.plot(z_s_cents,b_zsamples)
-    plt.plot(z_s_cents_theo,bz_data_theo[i,:])
-plt.savefig('biases.png')
-plt.close()
+    #plt.plot(z_s_cents,b_zsamples)
+    #plt.plot(z_s_cents_theo,bz_data_theo[i,:])
+#plt.savefig('biases.png')
+#plt.close()
     
 # matrices used for the fast calculation
 b_mat = np.repeat(b_zsamples_theo.reshape(N_zsamples_theo,1),N_zsamples_theo,axis=1)
@@ -504,7 +499,7 @@ else:
     Cl_true = np.load(cl_fname)
 
 # add noise
-add_noise=True
+add_noise = False#True # TESTING
 if (add_noise):
     cln_fname="Clnoise_"+str(tomo)+"_"+str(zsam)+"_"+str(functional)+".npy"
     if not os.path.isfile(cln_fname):
@@ -519,17 +514,19 @@ if (add_noise):
     Nl = np.dot(X,R)                                                                            
     # adding noise                                                                                   
     Cl_true += 0.2*Nl
-    # WHY 0.2?
+    # 0.2 to reduce noise
 
 # _______________________________________________
 #               REGULARIZATION PRIOR
 # _______________________________________________
 
-## first and second derivatives
+# first and second derivatives
+D0 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
 D1 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
 D2 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
 theo = dndz_data_theo.flatten()
 for i in range(N_tomo):
+    D0[i*N_zsamples_theo:(i+1)*N_zsamples_theo,i*N_zsamples_theo:(i+1)*N_zsamples_theo] += np.ones((N_zsamples_theo,N_zsamples_theo))
     for j in range (0,N_zsamples_theo-1):
         lam = np.zeros(N_zsamples_theo*N_tomo)
         lam[i*N_zsamples_theo+j]=1
@@ -548,14 +545,34 @@ sigma2sq=np.dot(np.dot(D2,theo),theo)
 test=np.ones(len(theo))
 print (np.dot(np.dot(D1,test),test),' is zero?')
 print (np.dot(np.dot(D2,test),test),' is zero?')
+print (np.dot(np.dot(D0,test/N_zsamples_theo),test/N_zsamples_theo),' is sum of all?')
+
 test=np.arange(len(theo))
 print (np.dot(np.dot(D1,test),test),' is finite?')
 print (np.dot(np.dot(D2,test),test),' is zero?')
 
-D1 /= (3**2*sigma1sq)
-D2 /= (3**2*sigma2sq)
+S = Delta_z_bin
+s = .1 #TESTING maybe change for bz
 
-D = D1+D2 #D0
+print(9*sigma1sq)
+print(1./(10.*S*s))
+print("_____________")
+print(9*sigma2sq)
+print(1./(10.*S*s**2))
+
+#D1 /= (3**2*sigma1sq)# this was what Anze had initially
+#D2 /= (3**2*sigma2sq)
+
+sigma1 = (Delta_z_bin**2/(10.*S*s))
+sigma2 = (Delta_z_bin**4/(10.*S*s**2))
+sigma1sq = sigma1**2
+sigma2sq = sigma2**2
+
+D0 /= N_tomo**2#TESTING ask Anze
+D1 /= (sigma1sq)
+D2 /= (sigma2sq)
+
+D = D0+D1+D2#TESTINGD0+D1+D2
 
 
 # ___________________________________
@@ -922,8 +939,6 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr=np.zeros(5),ell=ells,compute_de
     else:
         return Cl_fast_all, Cl_fast_all, ddCl_fast_all, Cov_fast_all
     
-
-
 # Load the curly C
 mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
 
@@ -935,19 +950,15 @@ mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
 '''
 # Might wanna use the other Cl_true which does not use the approximation
 cl_true, dCldp_true, Cov_true = compute_fast_Cls(dndz_data_theo,mat_C,compute_ders=True,compute_2nd_ders=False,compute_cov=True)
-iCov_true = la.inv(Cov_true)
-
-# In case you ever need fisher
-fisher = np.dot(dCldp_true,np.dot(iCov_true,dCldp_true.T))
 '''
-
+# number of power spectrum elements
 N_elm = len(Cl_true)
 Cl_true = Cl_true.reshape(N_elm,1)
 
 # bz guess
-bz_guess = bz_data_theo.flatten()+0.1*np.random.randn(N_zsamples_theo*N_tomo)
+bz_guess = bz_data_theo.flatten()+0.1*np.random.randn(N_zsamples_theo*N_tomo)#TESTING
 
-# parameter vector
+# full parameter vector
 full_x = np.hstack((dndz_data_theo.flatten().copy(),bz_guess))
 
 # dndz guess
@@ -956,15 +967,17 @@ if gauss_guess == 1:
     for i in range(N_tomo):
         dndz_guess = gaussian(z_s_cents_theo,z_bin_cents[i],0.2)
         dndz_guess /= np.sum(dndz_guess)
+        # TESTING comment out for varying only bz
         full_x[i*N_zsamples_theo:(i+1)*N_zsamples_theo] = dndz_guess
-# Initial both guess
+
+# Initial full guess
 full_x0 = full_x.copy()
 # ____________________________________________
 #                 NEWTON-RAPHSON
 # ____________________________________________
 
-al_i = 1.#1.e-1#7#5 for 3#7 for 7 # 1 if varying just one
-alpha = al_i
+alpha_ini = 1.
+alpha = alpha_ini
 for s in range(steps):    
     dndz_this = full_x[:(N_zsamples_theo*N_tomo)]
     bz_this = full_x[(N_zsamples_theo*N_tomo):2*(N_zsamples_theo*N_tomo)]
@@ -978,11 +991,11 @@ for s in range(steps):
     iCov_fast = la.inv(Cov_fast)
     Delta_Cl = Cl_fast-Cl_true
 
-    # regularization
+    # regularization params
     n_diff = (dndz_this).reshape(N_zsamples_theo*N_tomo,1)
-    Reg_V = np.dot(D,n_diff)
+    Reg_V = np.dot(D,n_diff)#-1./N_tomo#TESTING # a bit better
     Reg_A = D
-    reg = 100#1.e14
+    reg = 1. # originally we used to vary this
     
     print("sum_dndz = ",np.sum(dndz_this))
     print("sum_bz = ",np.sum((bz_this)))    
@@ -996,14 +1009,15 @@ for s in range(steps):
     print("chi2 = ",chi2)
     print("__________________________")
         
-    # Regularization matrix A and vector V for keeping sum fixed and derivatives smooth
+    # Regularization for keeping sum fixed and derivatives smooth
+    # Reg matrix A
     R_full_A = np.zeros((2*N_zsamples_theo*N_tomo,2*N_zsamples_theo*N_tomo))
     R_full_A[:N_zsamples_theo*N_tomo,:N_zsamples_theo*N_tomo] = reg*Reg_A
-    
+    # Reg vector V
     R_full_V = np.zeros((2*N_zsamples_theo*N_tomo,1))
     R_full_V[:N_zsamples_theo*N_tomo] = reg*Reg_V
 
-    # TESTING REGULARIZATION FOR BZ
+    # TESTING Regularization for b(z) -- may need to change the factors
     R_full_A[N_zsamples_theo*N_tomo:N_zsamples_theo*N_tomo*2,N_zsamples_theo*N_tomo:N_zsamples_theo*N_tomo*2] = reg*Reg_A
     R_full_V[N_zsamples_theo*N_tomo:N_zsamples_theo*N_tomo*2] = reg*Reg_V
     
@@ -1011,7 +1025,7 @@ for s in range(steps):
     A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T)) + R_full_A
     V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_full_V 
 
-    # TESING whether fixing dndz and varying only 'bz' or vice versa or verying everything works properly
+    # fixing dndz and varying only 'bz' or vice versa or varying everything
     testing_vary_only = 0#'bz'#'dndz'#0
     if testing_vary_only == 'bz': select1 = 1; select2 = 2
     if testing_vary_only == 'dndz': select1 = 0; select2 = 1
@@ -1020,19 +1034,22 @@ for s in range(steps):
     V = V[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo]    
     iA = la.inv(A)
 
+    # Compute the next step
     step_nr = np.dot(iA,V).flatten()
-    if alpha < al_i: alpha = al_i#*= 2.
+    if alpha < alpha_ini: alpha = alpha_ini
     full_x[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo] += -alpha*step_nr
 
     print("chi2_min, chi2 = ",chi2_min, chi2)
     # if new try is worse than the previous
     while (chi2_min-1.e-6 < chi2):
-        # go back to where it was
         print("In the loop")
+        # go back to where it was
         full_x[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo] += alpha*step_nr
         alpha /= 2.
+        # take half step
         full_x[select1*N_zsamples_theo*N_tomo:select2*N_zsamples_theo*N_tomo] += -alpha*step_nr
 
+        # extract the parameter values
         dndz_this = full_x[:(N_zsamples_theo*N_tomo)]
         bz_this = full_x[(N_zsamples_theo*N_tomo):2*(N_zsamples_theo*N_tomo)]
     
@@ -1043,6 +1060,7 @@ for s in range(steps):
         Delta_Cl = Cl_fast-Cl_true
 
         chi2 = np.dot(Delta_Cl.T,np.dot(iCov_fast,Delta_Cl))[0][0]
+        if alpha < 0.01: break
 
 print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(dndz_this))
@@ -1055,3 +1073,68 @@ print("bz_guess = ",((full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo]))
 with open('results_dndz_bz_true_answer_initial.txt','w') as f:
     for a,b,c in zip(np.hstack((dndz_data_theo.flatten(),bz_data_theo.flatten())), full_x, full_x0):
         f.write("%f %f %f \n"%(a,b,c))
+
+# ________________________________________________
+#               EVALUATION OF ERRORS
+# ________________________________________________
+
+# fisher matrix
+fisher = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T))
+
+# requiring sum dndz = const by adding diagonal square blocks of 1's times large number
+fisher_sumfix = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
+ones = np.ones((N_zsamples_theo,N_zsamples_theo))*1.e9
+for i in range(N_tomo):                     
+    fisher_sumfix[i*N_zsamples_theo:i*N_zsamples_theo+N_zsamples_theo,i*N_zsamples_theo:i*N_zsamples_theo+N_zsamples_theo] = ones
+
+# check if fisher is positive definite
+if (is_pos_def(fisher) != True): print("Fisher is not positive definite!"); exit(0)
+
+np.save("fisher.npy",fisher);
+quit()
+
+par_len = N_zsamples_theo*N_tomo
+offset = 0*par_len
+offset_end = 1*par_len
+# importantly we add this only to the dndz part of the fisher matrix
+fisher[offset:offset_end,offset:offset_end] += fisher_sumfix
+fisher[offset_end:2*offset_end,offset_end:2*offset_end] += fisher_sumfix
+
+# plot fisher and hope for the best
+plt.imshow(fisher,interpolation="nearest")
+plt.colorbar()
+plt.savefig('fish.png')
+plt.close()
+
+# compute inverse fisher
+inv_fisher = la.inv(fisher)
+
+# check if inv fisher is positive definite
+if (is_pos_def(inv_fisher) != True): print("Inverse Fisher is not positive definite!"); exit(0)
+quit()
+# normalize inv fisher matrix to show fractional difference
+for i in range(offset_end-offset):
+    for j in range(offset_end-offset):
+        #print("Parameter ",nam_i,", which is number ",(i+1),"out of ",npar_vary)
+        #print("Parameter ",nam_j,", which is number ",(j+1),"out of ",npar_vary)
+        inv_fisher[i,j] /= (dndz_this[i]*dndz_this[j])
+# save inv fisher
+#np.save('inv_'+name+'.npy',inv_fisher)
+
+# get only the marginalized errors on each element
+inv_F_alpha_alpha = np.diag(inv_fisher)
+sigma_alpha = np.sqrt(inv_F_alpha_alpha[offset:offset_end])
+
+# plot a block of inverse fisher for the dndz's in each tomographic bin cause why not
+for i in range(N_tomo):
+    nam = 'dndz_'+i
+    print(sigma_alpha[N_zsamples_theo*i:N_zsamples_theo*i+N_zsamples_theo])   
+    plt.imshow(inv_fisher[offset+N_zsamples_theo*i:offset+N_zsamples_theo*i+N_zsamples_theo,offset+N_zsamples_theo*i:offset+N_zsamples_theo*i+N_zsamples_theo],interpolation="nearest")
+    plt.colorbar()
+    plt.savefig('inv_fish_block_'+nam+'.png')
+    plt.close()
+    
+plt.imshow(inv_fisher,interpolation="nearest")
+plt.colorbar()
+plt.savefig('inv_fish.png')
+plt.close()
