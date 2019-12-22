@@ -7,8 +7,10 @@ from itertools import combinations
 def is_pos_def(x):
     return np.all(np.linalg.eigvals(x) > 0)
 
-def compute_Cls(dndz_z,b_z,z_cent,N_gal_sample,ell,a_arr,k_arr,sigma_e2,area_overlap,powerspec='halofit',simple_bias=True):
-
+def compute_Cls(cosmo_fid,dndz_z,b_z,z_cent,N_gal_sample,ell,a_arr,k_arr,sigma_e2,area_overlap,powerspec='halofit',simple_bias=True):
+    N_ell = len(ell)
+    N_zsamples_theo = len(z_cent)
+    N_tomo = len(N_gal_sample)
     # choose a scheme for evaluating the matter power spectrum -- halofit is recommended
     if powerspec == 'halofit':
         # Compute matter pk using halofit
@@ -48,6 +50,12 @@ def compute_Cls(dndz_z,b_z,z_cent,N_gal_sample,ell,a_arr,k_arr,sigma_e2,area_ove
     
     # make C_ell of size N_ell*N_tomo*(2N_tomo+1)
     C_ell = np.zeros(N_tot_corr)
+
+    # List all redshift bin combinations
+    temp = np.arange(2*N_tomo)
+    temp = np.vstack((temp,temp)).T
+    combs = np.array(list(combinations(range(2*N_tomo),2)))
+    all_combos = np.vstack((temp,combs))
     
     for c, comb in enumerate(all_combos):
         i = comb[0]%N_tomo # first redshift bin
@@ -106,7 +114,7 @@ def compute_Cls(dndz_z,b_z,z_cent,N_gal_sample,ell,a_arr,k_arr,sigma_e2,area_ove
     print(len(C_ell))
     return C_ell
 
-def compute_inv_Cov(C_ell,N_tomo,ell,f_sky):
+def compute_Cov(C_ell,N_tomo,ell,f_sky):
     # number of ells 
     N_ell = len(ell)
     delta_ell = ell[1]-ell[0]

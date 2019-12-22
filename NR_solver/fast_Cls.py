@@ -1,13 +1,22 @@
 import numpy as np
 from itertools import combinations
 
-def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr,N_gal_sample,ell,sigma_e2,area_overlap,compute_2nd_ders=False):
+def is_pos_def(x):
+    return np.all(np.linalg.eigvals(x) > 0)
+
+def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr,N_gal_sample,ell,sigma_e2,area_overlap,f_sky,compute_2nd_ders=False):
     # After obtaining the mCs we can now do simple linalg to get the Cls
     # check if it is the correct shape
+    N_tomo = len(N_gal_sample)
+    N_zsamples_theo = len(dndz_z_curr)//N_tomo
+    delta_ell = ell[1]-ell[0]
+
+    
     if dndz_z_curr.shape[0] != N_tomo: dndz_z_curr = dndz_z_curr.reshape(N_tomo,N_zsamples_theo)
     if b_z_curr.shape[0] != N_tomo: b_z_curr = b_z_curr.reshape(N_tomo,N_zsamples_theo)
     # number of ell elements
     N_ell = len(ell)
+
     # correlation number for all types gg gs ss and all combinations of redshift
     tot_corr = N_ell*(N_tomo*(2*N_tomo+1))
     
@@ -43,7 +52,6 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr,N_gal_sample,ell,sigma_e2,area_
 
         # for each combination c, the correlation C_ell has N_ell = 10 entries
         C_ell = np.zeros(N_ell)
-        bias_mat = np.ones_like(b_mat)
         ni = dndz_z_curr[i_tomo,:].reshape(1,N_zsamples_theo)
         nj = dndz_z_curr[j_tomo,:].reshape(N_zsamples_theo,1)
         
@@ -88,21 +96,20 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr,N_gal_sample,ell,sigma_e2,area_
                 
         for k in range(N_ell):
             # Here we compute the Cls analytically using the curly C matrix at wavemode k
-            matC_k = mat_cC[:,:,N_ell*type_xy+k]*bias_mat
+            matC_k = mat_cC[:,:,N_ell*type_xy+k]
             
             C_ell[k] = np.dot(np.dot(di,matC_k),dj)
             
-            if (compute_ders == True and complex_bz==True):
-                # n_a der: ba na_f Caj bj nj + bi ni Cia na_f ba
-                # b_a der: ba_f na Caj bj nj + bi ni Cia na ba_f
-                if (i_tomo == j_tomo):
-                    dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni_f*bi)+np.dot(bi*ni,matC_k)*(nj_f*bj).T
-                    dCl_fast_all[N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni*bi_f)+np.dot(bi*ni,matC_k)*(nj*bj_f).T
-                else:
-                    dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni_f*bi)
-                    dCl_fast_all[N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni*bi_f)
-                    dCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(bi*ni,matC_k)*(nj_f*bj).T
-                    dCl_fast_all[N_tomo*N_zsamples_theo+j_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(bi*ni,matC_k)*(nj*bj_f).T
+            # n_a der: ba na_f Caj bj nj + bi ni Cia na_f ba
+            # b_a der: ba_f na Caj bj nj + bi ni Cia na ba_f
+            if (i_tomo == j_tomo):
+                dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni_f*bi)+np.dot(bi*ni,matC_k)*(nj_f*bj).T
+                dCl_fast_all[N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni*bi_f)+np.dot(bi*ni,matC_k)*(nj*bj_f).T
+            else:
+                dCl_fast_all[i_tomo*N_zsamples_theo:(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni_f*bi)
+                dCl_fast_all[N_tomo*N_zsamples_theo+i_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(i_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(matC_k,bj*nj).T*(ni*bi_f)
+                dCl_fast_all[j_tomo*N_zsamples_theo:(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(bi*ni,matC_k)*(nj_f*bj).T
+                dCl_fast_all[N_tomo*N_zsamples_theo+j_tomo*N_zsamples_theo:N_tomo*N_zsamples_theo+(j_tomo+1)*N_zsamples_theo,(N_ell*c)+k] = np.dot(bi*ni,matC_k)*(nj*bj_f).T
                     
             if (compute_2nd_ders == True): # NOT WORKING PERFECTLY
                 if (i_tomo == j_tomo):
@@ -115,7 +122,6 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr,N_gal_sample,ell,sigma_e2,area_
         # This is the usual, proven way of recording the Cls
         Cl_fast_all[(N_ell*c):(N_ell*c)+N_ell] = C_ell
     
-
     # We now compute the covariance matrix
     Cov_fast_all = np.zeros((len(Cl_fast_all),len(Cl_fast_all)))    
     # Knox formula
@@ -148,7 +154,6 @@ def compute_fast_Cls(dndz_z_curr,mat_cC,b_z_curr,N_gal_sample,ell,sigma_e2,area_
                     N_ell,(N_ell*c_A):(N_ell*c_A)+N_ell] = np.diag(Cov_ijmn)
 
 
-       
     if (is_pos_def(Cov_fast_all) != True): print("Covariance is not positive definite!"); exit(0)
 
     return Cl_fast_all, dCl_fast_all, Cov_fast_all

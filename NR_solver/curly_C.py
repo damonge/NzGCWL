@@ -1,5 +1,6 @@
 import numpy as np
 import pyccl as ccl
+from itertools import combinations
 
 # linear shape
 def D_i(x,x_i,Delta_x):
@@ -24,17 +25,17 @@ def D_i_near(x,x_i,Delta_x):
 
 # Computing curly C matrix entries for every N_t_s*(2 N_t_s+1)*N_ell = 1(2*1+1)*10 = 30 entries
 # NOTE THAT N_t_s, i.e. N_tomo_single IS ALWAYS 1. THIS IS BECAUSE CURLY C IS INDEP OF TOMO BINS
-def compute_mCs(cosmo_fid,i_zs,j_zs,z_cent_theo,z_cent,a_arr,k_arr,ell): 
+def compute_mCs(cosmo_fid,z_cent_theo,z_cent,a_arr,k_arr,ell,i_zs,j_zs): 
     # bias parameters should be set to 1
+    N_zsamples = len(z_cent)
+    N_zsamples_theo = len(z_cent_theo)
     b_z = np.ones(N_zsamples)
     N_tomo_single = 1
-    N_zsamples = len(z_cent)-1
-    N_zsamples_theo = len(z_cent_theo)-1
     N_ell = len(ell)
 
     # generate the shapes
     N_many = N_zsamples # THIS IS 100 TIMES N_ZSAMPLES_THEO
-    z_many = z_s_cents
+    z_many = z_cent
     Delta_z_s = np.mean(np.diff(z_cent_theo))
     D_i_many_near = np.zeros((N_zsamples_theo,N_many))
 

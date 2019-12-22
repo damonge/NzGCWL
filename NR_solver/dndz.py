@@ -6,19 +6,19 @@ from scipy.interpolate import interp1d
 def lorentz(x, A, mu, sig):
     return A/(1+(np.abs(x-mu)/(0.5*sig))**2.7)
 
-def get_nz_from_photoz_bins(zp_code,zp_ini,zp_end,zt_edges,zt_nbins):
+def get_nz_from_photoz_bins(cat,zp_code,zp_ini,zp_end,zt_edges,zt_nbins):
     # Select galaxies in photo-z bin
     sel = (cat[zp_code] <= zp_end) & (cat[zp_code] > zp_ini)
 
+    # return the spectroscopic redshifts and the weights
+    photo_zs = cat['PHOTOZ'][sel]                                                                          
+    weights = cat['weight'][sel]
+    
     # Effective number of galaxies
     ngal = len(cat) * np.sum(cat['weight'][sel])/np.sum(cat['weight'])
     # Mean spectroscopic redshift and standard deviation
     mean = np.sum(photo_zs*weights)/np.sum(weights)
     sigma = np.sqrt(np.sum(photo_zs**2*weights)/np.sum(weights)-mean**2)
-    
-    # return the spectroscopic redshifts and the weights
-    photo_zs = cat['PHOTOZ'][sel]                                                                          
-    weights = cat['weight'][sel]
 
     # Make a normalized histogram
     nz, z_bins=np.histogram(photo_zs,                    # 30-band photo-zs
@@ -42,7 +42,7 @@ def summon_dndz(z_bin_edges,N_zsamples_theo,N_zsamples,cat_dir):
     z_s_edges = np.linspace(z_ini_sample,z_end_sample,N_zsamples+1)
     z_s_cents = (z_s_edges[1:]+z_s_edges[:-1])*.5
 
-    # Read catalog # REMOVE TESTING
+    # Read catalog
     cat = fits.open(cat_dir)[1].data
 
     # initiating the arrays
@@ -61,7 +61,7 @@ def summon_dndz(z_bin_edges,N_zsamples_theo,N_zsamples,cat_dir):
 
        
         dndz_this, z_edges_theo, N_gal_this, mean, sigma = \
-                        get_nz_from_photoz_bins(zp_code='pz_best_eab',# Photo-z code
+                        get_nz_from_photoz_bins(cat, zp_code='pz_best_eab',# Photo-z code
                                                 zp_ini=z_bin_ini, zp_end=z_bin_end, # Bin edges
                                                 zt_edges=(z_ini_sample, z_end_sample),          # Sampling range
                                                 zt_nbins=N_zsamples_theo)         # Number of samples
@@ -82,7 +82,7 @@ def summon_dndz(z_bin_edges,N_zsamples_theo,N_zsamples,cat_dir):
 
 
         # interpolating from N_zsamples_theo points
-        f = interp1d(np.append(z_cents_theo,zout),\
+        f = interp1d(np.append(z_cents_theo,z_out),\
             np.append(dndz_this,dndz_out),kind='nearest',bounds_error=0,fill_value=0.)
             
         # record discrete dndzs

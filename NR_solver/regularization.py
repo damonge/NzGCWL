@@ -4,12 +4,12 @@ import numpy as np
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
-def regularizator(N_tomo,N_zsamples_theo,Delta_z_bin,corr=0.1,first,second,sum):
+def summon_D(N_tomo,N_zsamples_theo,Delta_z_bin,first,second,sum,corr=0.1):
     # first and second derivatives
     D0 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
     D1 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
     D2 = np.zeros((N_zsamples_theo*N_tomo,N_zsamples_theo*N_tomo))
-    theo = dndz_data_theo.flatten()
+    #theo = dndz_data_theo.flatten()
     for i in range(N_tomo):
         D0[i*N_zsamples_theo:(i+1)*N_zsamples_theo,i*N_zsamples_theo:(i+1)*N_zsamples_theo] += np.ones((N_zsamples_theo,N_zsamples_theo))
         for j in range (0,N_zsamples_theo-1):
@@ -42,3 +42,4 @@ def regularizator(N_tomo,N_zsamples_theo,Delta_z_bin,corr=0.1,first,second,sum):
     if sum == False: D0 *= 0
 
     D = D0+D1+D2
+    return D

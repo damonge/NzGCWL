@@ -2,7 +2,7 @@ import numpy as np
 import scipy.linalg as la
 from fast_Cls import compute_fast_Cls
 
-def adaptable_nr(full_x,mat_C,D,N_tomo,N_zsamples_theo,steps,N_gal_sample,ell,sigma_e2,area_overlap,vary_only=False):
+def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_sample,ell,sigma_e2,area_overlap,f_sky,steps,vary_only=False):
     # Initial step-size
     alpha_ini = 1.
     alpha = alpha_ini
@@ -14,7 +14,7 @@ def adaptable_nr(full_x,mat_C,D,N_tomo,N_zsamples_theo,steps,N_gal_sample,ell,si
         print("Delta_bz = ",np.sqrt(np.sum((bz_data_theo.flatten()-(bz_this))**2)))
         
         # compute the Cls and their derivatives analytically
-        Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,N_gal_sample,ell,sigma_e2,area_overlap)
+        Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,N_gal_sample,ell,sigma_e2,area_overlap,f_sky)
         N_elm = len(Cl_fast)
         Cl_fast = Cl_fast.reshape(N_elm,1)
         iCov_fast = la.inv(Cov_fast)
@@ -22,13 +22,13 @@ def adaptable_nr(full_x,mat_C,D,N_tomo,N_zsamples_theo,steps,N_gal_sample,ell,si
 
         # regularization params
         n_diff = (dndz_this).reshape(N_zsamples_theo*N_tomo,1)
+        
         Reg_V = np.dot(D,n_diff)#-1./N_tomo#TESTING # a bit better
         Reg_A = D
         reg = 1. # originally we used to vary this
         
         print("sum_dndz = ",np.sum(dndz_this))
         print("sum_bz = ",np.sum((bz_this)))    
-        #print("D price = ",np.dot(full_x,np.dot(D,full_x)), np.dot(np.dot(D,theo),theo))
         
         # compute chi2 for this try
         if s == 0: chi2_old = 1.e50; chi2_min = 1.e50
@@ -82,7 +82,7 @@ def adaptable_nr(full_x,mat_C,D,N_tomo,N_zsamples_theo,steps,N_gal_sample,ell,si
             bz_this = full_x[(N_zsamples_theo*N_tomo):2*(N_zsamples_theo*N_tomo)]
         
             # compute the Cls and their derivatives analytically
-            Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,N_gal_sample,ell,sigma_e2,area_overlap)
+            Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,N_gal_sample,ell,sigma_e2,area_overlap,f_sky)
             Cl_fast = Cl_fast.reshape(N_elm,1)
             iCov_fast = la.inv(Cov_fast)
             Delta_Cl = Cl_fast-Cl_true

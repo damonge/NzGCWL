@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.linalg as la
-
+import os
 from dndz import summon_dndz
 from bz import summon_bz
 from Cls import compute_Cls, compute_Cov
@@ -9,6 +9,7 @@ from fast_Cls import compute_fast_Cls
 from regularization import summon_D, gaussian
 from newton_raphson import adaptable_nr
 
+np.random.seed(300)
 
 # number of tomo bins and zsamples
 N_tomo = 7
@@ -36,26 +37,25 @@ k_ar = np.logspace(-4.3, 3, 1000)
 a_ar = (1./(1+np.linspace(0., 3., 50)))[::-1]
 
 # area of samples
-area_COSMOS_HSC = 1.7*np.pi/180.**2 # in sq rad
+area_COSMOS_HSC = 1.7*(np.pi/180.)**2 # in sq rad
 f_sky_HSC = 100./41253.
 
 N_gal_bin, dndz_data_theo, dndz_data = summon_dndz(z_bin_edges,N_zsamples_theo,N_zsamples,catalog_dir)
 bz_data_theo, bz_data, cosmo_fid = summon_bz(N_tomo,z_s_cents_theo,z_s_cents)
 
-
-cl_fname = "Cltrue_"+str(tomo)+"_"+str(zsam)+"_0.npy"
+cl_fname = "Cltrue_"+str(N_tomo)+"_"+str(N_zsamples_theo)+"_0.npy"
 if not os.path.isfile(cl_fname):
     print ("Computing Cl_true")
-    Cl_true = compute_Cls(dndz_data, bz_data, z_s_cents,N_gal_bin,ells,a_ar,k_ar,sigma_e2,area_COSMOS_HSC)
+    Cl_true = compute_Cls(cosmo_fid,dndz_data, bz_data, z_s_cents,N_gal_bin,ells,a_ar,k_ar,sigma_e2,area_COSMOS_HSC)
     print ("done")
     np.save(cl_fname,Cl_true)
 else:
-    Cl_true = np.load(cl_fname)
+    Cl_true = np.load("../"+cl_fname)
 
 # add noise
 add_noise = False#True # TESTING
 if (add_noise):
-    cln_fname = "Clnoise_"+str(tomo)+"_"+str(zsam)+"_0.npy"
+    cln_fname = "Clnoise_"+str(N_tomo)+"_"+str(N_zsamples_theo)+"_0.npy"
     if not os.path.isfile(cln_fname):
         print ("computing cov for noise")
         Cov = compute_Cov(Cl_all,N_tomo,ells,f_sky_HSC)
@@ -71,8 +71,8 @@ if (add_noise):
     # 0.2 to reduce noise
 
 Delta_z_bin = np.mean(np.diff(z_bin_edges))
-s = .1 #TESTING maybe change for bz
-D = summon_D(N_tomo,N_zsamples_theo,Delta_z_bin,s,first=True,second=True,sum=True)
+#TESTING maybe change for bz
+D = summon_D(N_tomo,N_zsamples_theo,Delta_z_bin,first=True,second=True,sum=True,corr=0.1)
 
 # curly C!
 cov_fname="mat_C_"+str(N_tomo)+"_"+str(N_zsamples_theo)+".npy"
@@ -87,21 +87,33 @@ if not os.path.isfile(cov_fname):
         for j in range(N_zsamples_theo):
             print(i,j)
             # In the function the dndz parameters are updated to the D_i_many guys and bz is 0
-            Cl_many = compute_mCs(cosmo_fid,i_zs=i,j_zs=j,z_s_cents_theo,z_s_cents,a_ar,k_ar,ells)
+            Cl_many = compute_mCs(cosmo_fid,z_s_cents_theo,z_s_cents,a_ar,k_ar,ells,i_zs=i,j_zs=j)
             print(Cl_many.sum())
             # record matrix entries for this choice of zsample bins i and j
             mat_C[i,j,:] = Cl_many 
         
     # Save curly C matrix
-    np.save("mat_C_"+str(N_tomo)+"_"+str(N_zsamples_theo)+".npy",mat_C)
+    np.save(cov_fname,mat_C)
+else:
+    # Load the curly C
+    mat_C = np.load(cov_fname)
+mat_C2 = np.load("../"+cov_fname)
 
-# Load the curly C
-mat_C = np.load("mat_C_"+str(tomo)+"_"+str(zsam)+".npy")
+#print(mat_C)
+#print(mat_C2)
+#print(np.max(np.abs(((mat_C-mat_C2)/mat_C))))
 
-'''
 # Can either use Cl_true with the approximation or the original
-compute_fast_Cls(dndz_data_theo,mat_C,bz_data_theo,N_gal_bin,ells,sigma_e2,area_COSMOS,compute_2nd_ders=False)
-'''
+cl_f, dcl, cov_cl = compute_fast_Cls(dndz_data_theo.flatten(),mat_C,bz_data_theo.flatten(),N_gal_bin,ells,sigma_e2,area_COSMOS_HSC,f_sky_HSC,compute_2nd_ders=False)
+
+print(Cl_true)
+#Cl_true = np.load(cl_fname)
+#cl_f = Cl_true
+print(Cl_true)
+print(cl_f)
+print(np.max(np.abs(((cl_f-Cl_true)/Cl_true))))
+print(np.sum(np.abs(((cl_f-Cl_true)/Cl_true))))
+quit()
 # number of power spectrum elements
 N_elm = len(Cl_true)
 Cl_true = Cl_true.reshape(N_elm,1)
@@ -126,7 +138,7 @@ full_x0 = full_x.copy()
 
 # TODO check whether this works, do weak prior on bz, make sure the adaptable step works
 
-dndz_answer, bz_answer = adaptable_nr(full_x,mat_C,D,N_tomo,N_zsamples_theo,steps=15,N_gal_bin,ells,sigma_e2,area_COSMOS,vary_only=False)
+dndz_answer, bz_answer = adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_bin,ells,sigma_e2,area_COSMOS_HSC,f_sky_HSC,steps=15,vary_only=False)
 
 print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(dndz_answer))

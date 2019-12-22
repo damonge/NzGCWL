@@ -4,12 +4,15 @@ from scipy.interpolate import interp1d
 
 def summon_bz(N_tomo,z_s_cents_theo,z_s_cents):
     # 6 standard cosmological parameters
-    Omb = .0493
-    Omk = .264
-    s8 = 0.
-    h = .8111
-    n_s = .6736
-    Omc = .9649
+    Omb = 0.0493
+    Omk = 0.0
+    s8 = 0.8111
+    h = 0.6736
+    n_s = 0.9649
+    Omc = 0.264
+    
+    N_zsamples_theo = len(z_s_cents_theo)
+    N_zsamples = len(z_s_cents)
         
     # Setting the cosmology
     FID_COSMO_PARAMS = {'Omega_b': Omb,
