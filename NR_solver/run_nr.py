@@ -15,7 +15,7 @@ np.random.seed(300)
 N_tomo = 7
 N_zsamples_theo = 20
 catalog_dir = "../data/cosmos_weights.fits"
-N_zsamples = N_zsamples_theo*10
+N_zsamples = N_zsamples_theo*1000
 z_ini = 0.
 z_end = 2.
 
@@ -50,7 +50,7 @@ if not os.path.isfile(cl_fname):
     print ("done")
     np.save(cl_fname,Cl_true)
 else:
-    Cl_true = np.load("../"+cl_fname)
+    Cl_true = np.load(cl_fname)
 
 # add noise
 add_noise = False#True # TESTING
@@ -97,23 +97,12 @@ if not os.path.isfile(cov_fname):
 else:
     # Load the curly C
     mat_C = np.load(cov_fname)
-mat_C2 = np.load("../"+cov_fname)
 
-#print(mat_C)
-#print(mat_C2)
-#print(np.max(np.abs(((mat_C-mat_C2)/mat_C))))
-
+'''
 # Can either use Cl_true with the approximation or the original
 cl_f, dcl, cov_cl = compute_fast_Cls(dndz_data_theo.flatten(),mat_C,bz_data_theo.flatten(),N_gal_bin,ells,sigma_e2,area_COSMOS_HSC,f_sky_HSC,compute_2nd_ders=False)
+'''
 
-print(Cl_true)
-#Cl_true = np.load(cl_fname)
-#cl_f = Cl_true
-print(Cl_true)
-print(cl_f)
-print(np.max(np.abs(((cl_f-Cl_true)/Cl_true))))
-print(np.sum(np.abs(((cl_f-Cl_true)/Cl_true))))
-quit()
 # number of power spectrum elements
 N_elm = len(Cl_true)
 Cl_true = Cl_true.reshape(N_elm,1)
