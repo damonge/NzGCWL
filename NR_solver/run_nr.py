@@ -125,9 +125,7 @@ if gauss_guess == 1:
 # Initial full guess
 full_x0 = full_x.copy()
 
-# TODO check whether this works, do weak prior on bz, make sure the adaptable step works
-
-dndz_answer, bz_answer = adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_bin,ells,sigma_e2,area_COSMOS_HSC,f_sky_HSC,steps=15,vary_only=False)
+dndz_answer, bz_answer, dCldp_answer, iCov_answer = adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_bin,ells,sigma_e2,area_COSMOS_HSC,f_sky_HSC,steps=10,vary_only=False)
 
 print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(dndz_answer))
@@ -140,3 +138,7 @@ print("bz_guess = ",((full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo]))
 with open('results_dndz_bz_true_answer_initial.txt','w') as f:
     for a,b,c in zip(np.hstack((dndz_data_theo.flatten(),bz_data_theo.flatten())), full_x, full_x0):
         f.write("%f %f %f \n"%(a,b,c))
+
+# fisher matrix
+fisher = np.dot(dCldp_answer,np.dot(iCov_answer,dCldp_answer.T))
+np.save("fisher.npy",fisher)

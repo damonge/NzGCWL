@@ -4,6 +4,7 @@ from fast_Cls import compute_fast_Cls
 
 
 def compute_chi2(Cl_fast,Cl_true,iCov_fast):
+    N_elm = len(Cl_fast)
     Cl_fast = Cl_fast.reshape(N_elm,1)
     Delta_Cl = Cl_fast-Cl_true
     chi2 = np.dot(Delta_Cl.T,np.dot(iCov_fast,Delta_Cl))[0][0]
@@ -28,19 +29,24 @@ def obtain_R_AV(dndz_this,D,len_par):
 
     return R_A, R_V
 
-def obtain_AV(dCldp_fast,Delta_Cl,iCov_fast,R_A,R_V,select1,select2):
+def obtain_AV(dCldp_fast,Cl_fast,Cl_true,iCov_fast,R_A,R_V,select1,select2):
+    N_elm = len(Cl_fast)
+    Cl_fast = Cl_fast.reshape(N_elm,1)
+    Delta_Cl = Cl_fast-Cl_true
+    
     # We neglect the second derivative with repect to Cl
     A = np.dot(dCldp_fast,np.dot(iCov_fast,dCldp_fast.T)) + R_A
-    V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_V 
-
+    V = np.dot(dCldp_fast,np.dot(iCov_fast,Delta_Cl)) + R_V  
+    
     A = A[select1:select2,select1:select2]
     V = V[select1:select2]
+    
     return A, V
 
 
-def prior_bz_AV(bz,bz0):
-    if !prior_bz: return 0., 0. 
-    sigma = 1.
+def prior_bz_AV(bz,bz0,prior_bz):
+    if not prior_bz: return 0., 0. 
+    sigma = .8#1.
     I = np.eye(len(bz))
     A = I/sigma**2
     V = (bz-bz0)/sigma**2
@@ -49,7 +55,7 @@ def prior_bz_AV(bz,bz0):
 def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_sample,ell,sigma_e2,area_overlap,f_sky,steps,vary_only=False):
 
     # do we want to have a prior on bz
-    prior_bz = False
+    prior_bz = 1#False
     
     # number of parameters
     len_par = N_zsamples_theo*N_tomo
@@ -85,7 +91,9 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
         print("sum_dndz = ",np.sum(dndz_this))
         print("sum_bz = ",np.sum((bz_this)))    
         
-        if chi2 < chi2_min: chi2_min = chi2; dndz_ans = dndz_this.copy(); bz_ans = bz_this.copy()
+        if chi2 < chi2_min:
+            chi2_min = chi2; dndz_ans = dndz_this.copy(); bz_ans = bz_this.copy()
+            iCov_ans = iCov_fast; dCldp_ans = dCldp_fast 
         # compute chi2 for this try
         chi2 = compute_chi2(Cl_fast,Cl_true,iCov_fast)
 
@@ -112,11 +120,16 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
         # regularization matrix and vector    
         R_A, R_V = obtain_R_AV(dndz_this,D,len_par)
 
-        A, V = obtain_AV(dCldp_fast,Delta_Cl,iCov_fast,R_A,R_V,select1,select2)
-
-        prior_bz_A, prior_bz_V = prior_bz_AV(bz_this,bz_data_theo.flatten(),prior_bz)
-        A += prior_bz_A
-        V += prior_bz_V
+        # prior on bz
+        a, v = prior_bz_AV(bz_this,bz_data_theo.flatten(),prior_bz)
+        print(a.shape)
+        print(v.shape)
+        print(R_V.shape)
+        
+        R_A[len_par:2*len_par,len_par:2*len_par] += a
+        R_V[len_par:2*len_par,0] += v
+        
+        A, V = obtain_AV(dCldp_fast,Cl_fast,Cl_true,iCov_fast,R_A,R_V,select1,select2)
         
         iA = la.inv(A)
             
@@ -125,4 +138,4 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
         if alpha < alpha_ini: alpha = alpha_ini
         full_x[select1:select2] += -alpha*step_nr
 
-    return dndz_ans, bz_ans
+    return dndz_ans, bz_ans, dCldp_ans, iCov_ans
