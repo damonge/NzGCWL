@@ -1,3 +1,5 @@
+
+
 import numpy as np
 import scipy.linalg as la
 import os
@@ -53,7 +55,7 @@ else:
     Cl_true = np.load(cl_fname)
 
 # add noise
-add_noise = False#True # TESTING
+add_noise = False # TESTING
 if (add_noise):
     cln_fname = "Clnoise_"+str(N_tomo)+"_"+str(N_zsamples_theo)+"_0.npy"
     if not os.path.isfile(cln_fname):
@@ -75,9 +77,9 @@ Delta_z_bin = np.mean(np.diff(z_bin_edges))
 D = summon_D(N_tomo,N_zsamples_theo,Delta_z_bin,first=True,second=True,sum=True,corr=0.1)
 
 # curly C!
-cov_fname="mat_C_"+str(N_tomo)+"_"+str(N_zsamples_theo)+".npy"
-if not os.path.isfile(cov_fname):
-    print ("Generating ",cov_fname)
+curlyc_fname="mat_C_"+str(N_tomo)+"_"+str(N_zsamples_theo)+".npy"
+if not os.path.isfile(curlyc_fname):
+    print ("Generating ",curlyc_fname)
     N_tomo_single = 1
     N_elm = (2*N_tomo_single+1)*N_tomo_single*N_ell # = 30 for gg, gs, ss
     mat_C = np.zeros((N_zsamples_theo,N_zsamples_theo,N_elm))
@@ -93,10 +95,10 @@ if not os.path.isfile(cov_fname):
             mat_C[i,j,:] = Cl_many 
         
     # Save curly C matrix
-    np.save(cov_fname,mat_C)
+    np.save(curlyc_fname,mat_C)
 else:
     # Load the curly C
-    mat_C = np.load(cov_fname)
+    mat_C = np.load(curlyc_fname)
 
 '''
 # Can either use Cl_true with the approximation or the original
@@ -123,20 +125,23 @@ if gauss_guess == 1:
         full_x[i*N_zsamples_theo:(i+1)*N_zsamples_theo] = dndz_guess
 
 # Initial full guess
-full_x0 = full_x.copy()
-
-dndz_answer, bz_answer, dCldp_answer, iCov_answer = adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_bin,ells,sigma_e2,area_COSMOS_HSC,f_sky_HSC,steps=10,vary_only=False)
+full_x_initial = full_x.copy()
+full_x_true = np.hstack((dndz_data_theo.flatten(),bz_data_theo.flatten()))
+dndz_answer, bz_answer, dCldp_answer, iCov_answer = adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,
+                                                                 full_x,mat_C,D,N_tomo,N_zsamples_theo,N_gal_bin,ells,
+                                                                 sigma_e2,area_COSMOS_HSC,f_sky_HSC,steps=10,
+                                                                 vary_only=False)
 
 print("dndz_true = ",(dndz_data_theo.flatten()))
 print("dndz_answer = ",(dndz_answer))
-print("dndz_guess = ",(full_x0[:N_zsamples_theo*N_tomo]))
+print("dndz_initial_guess = ",(full_x_initial[:N_zsamples_theo*N_tomo]))
 print("__________________________________________")
 print("bz_true = ",(bz_data_theo.flatten()))
 print("bz_answer = ",((bz_answer)))
-print("bz_guess = ",((full_x0[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo])))
+print("bz_initial_guess = ",((full_x_initial[N_zsamples_theo*N_tomo:2*N_zsamples_theo*N_tomo])))
 
 with open('results_dndz_bz_true_answer_initial.txt','w') as f:
-    for a,b,c in zip(np.hstack((dndz_data_theo.flatten(),bz_data_theo.flatten())), full_x, full_x0):
+    for a,b,c in zip(full_x_true, full_x, full_x_initial):
         f.write("%f %f %f \n"%(a,b,c))
 
 # fisher matrix

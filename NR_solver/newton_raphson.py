@@ -75,6 +75,7 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
     # Initial step-size
     alpha_ini = 1.
     alpha = alpha_ini
+    done = False
     for s in range(steps):
         print("______________  Step = ",s,"______________")
 
@@ -98,14 +99,11 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
         chi2 = compute_chi2(Cl_fast,Cl_true,iCov_fast)
 
         # if new try is worse than the previous
-        while (chi2_min-1.e-6 < chi2):
+        while (chi2_min < chi2):
             print("In the loop")
-            # go back to where the smaller value of chi2 was
-            full_x[select1:select2] += alpha*step_nr
-            alpha /= 2.
-
             # take half step instead
-            full_x[select1:select2] += -alpha*step_nr
+            alpha /= 2.
+            full_x[select1:select2] = full_x_saved - alpha*step_nr
 
             # extract the parameter values
             dndz_this = full_x[:len_par]; bz_this = full_x[len_par:2*len_par]
@@ -113,10 +111,15 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
             # compute the Cls and their derivatives analytically
             Cl_fast, dCldp_fast, Cov_fast = compute_fast_Cls(dndz_this,mat_C,bz_this,N_gal_sample,ell,sigma_e2,area_overlap,f_sky)
             iCov_fast = la.inv(Cov_fast)
-
             chi2 = compute_chi2(Cl_fast,Cl_true,iCov_fast)
-            if alpha < 0.01: break
 
+            if alpha < 0.001:
+                break
+
+        if (chi2_min < chi2):
+            print ("Cannot improve any more. Giving up")
+            break
+        
         # regularization matrix and vector    
         R_A, R_V = obtain_R_AV(dndz_this,D,len_par)
 
@@ -136,6 +139,7 @@ def adaptable_nr(Cl_true,dndz_data_theo,bz_data_theo,full_x,mat_C,D,N_tomo,N_zsa
         # Compute the next step
         step_nr = np.dot(iA,V).flatten()
         if alpha < alpha_ini: alpha = alpha_ini
+        full_x_saved = np.copy(full_x[select1:select2])
         full_x[select1:select2] += -alpha*step_nr
 
     return dndz_ans, bz_ans, dCldp_ans, iCov_ans
